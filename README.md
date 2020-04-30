@@ -1,16 +1,9 @@
-# Spring 2020 Senior Project: Tahoe UV-C Platform
-
-## Final Evaluation
-
-In lieu of a packaged Windows executable, the following video provides a demonstration and overview of the project.
-
-[Tahoe Project Overview and Demo](https://youtu.be/7mDdOYYlIyk)
+# UV-C Propulsion System
 
 ## Team Members
 
-Alexander Ng - a_ng9@u.pacific.edu
+Alexander Ng
 
-Emilano Barroso - e_barroso@u.pacific.edu
 
 ## Introduction
 
