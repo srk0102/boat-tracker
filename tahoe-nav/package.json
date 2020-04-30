@@ -1,0 +1,19 @@
+{
+  "name": "tahoe-nav",
+  "version": "0.1.0",
+  "main": "main.js",
+  "author": "Alexander Ng",
+  "scripts": {
+    "start": "electron .",
+    "rebuild": "electron-rebuild -f -w serialport"
+  },
+  "devDependencies": {
+    "electron": "^8.2.3"
+  },
+  "dependencies": {
+    "electron-log": "^4.1.1",
+    "electron-rebuild": "^1.10.1",
+    "johnny-five": "^1.4.0",
+    "moment": "^2.24.0"
+  }
+}

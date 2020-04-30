@@ -1,0 +1,47 @@
+Research Resource: Share links/documentation here
+
+Note: Not all links are relevant to current implementation
+GPS/AGRI
+
+https://www.precisionag.com/market-watch/17-field-scouting-apps-for-precision-agriculture/#Tinsel/58284/9
+
+https://hackaday.com/2018/11/09/tractor-drives-itself-thanks-to-esp32-and-open-source/
+
+“precision agriculture”
+
+tahoercd.org › wp-content › uploads › 2019/02 › UV_Plant_Control_...Aquatic Invasive Plant Control Pilot Project Final Monitoring ...
+
+www.cal-ipc.org › wp-content › uploads › 2019/01 › Cal_IPC_Symp...Aquatic Invasive Plant Control Pilot Project Using Ultraviolet ...
+
+https://tahoekeysweeds.org/wp-content/uploads/2018/12/UV_Plant_Control_Pilot_2017_Progress-Report.pdf
+
+https://www.instructables.com/id/Boat-Autopilot/
+
+https://maker.pro/arduino/tutorial/how-to-control-servo-motors-with-an-arduino-and-joystick
+
+https://www.youtube.com/watch?v=QCNoVRgETRc
+
+https://www.dimensionengineering.com/datasheets/Sabertooth2x60.pdf
+
+https://learn.adafruit.com/adafruits-raspberry-pi-lesson-5-using-a-console-cable
+use this to connect to drivers with laptop
+
+https://lastminuteengineers.com/joystick-interfacing-arduino-processing/
+
+https://learn.adafruit.com/adafruit-ultimate-gps/parsed-data-output
+
+https://store.arduino.cc/usa/mega-2560-r3
+
+https://cdn.instructables.com/ORIG/FQY/5ITY/HJ5ZYAJ4/FQY5ITYHJ5ZYAJ4.pdf
+
+https://learn.sparkfun.com/tutorials/gps-rtk2-hookup-guide?_ga=2.242908034.1671399572.1581623151-900590377.1581439095#setting-the-gps-rtk2-as-a-correction-source
+
+https://learn.sparkfun.com/tutorials/sparkfun-gps-neo-m9n-hookup-guide?_ga=2.152066105.1671399572.1581623151-900590377.1581439095
+
+https://www.u-blox.com/en/product/c099-f9p-application-board#tab-kit-includes
+
+https://deepsouthrobotics.com/2019/06/03/the-taming-of-the-u-blox-zed-f9p/
+
+https://deepsouthrobotics.com/2017/04/20/spilling-the-beans-on-rtk/
+
+https://deepsouthrobotics.com/2019/05/23/piecing-together-an-autonomous-mowing-rig/

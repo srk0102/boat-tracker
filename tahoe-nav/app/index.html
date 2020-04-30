@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <!-- https://electronjs.org/docs/tutorial/security#csp-meta-tag -->
+    <link rel="stylesheet" href="styles.css" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="script-src 'self' https://maps.googleapis.com https://maps.gstatic.com 'unsafe-inline';"
+    />
+    <title>Vessel Propulsion System</title>
+  </head>
+  <div class="window">
+    <div class="window-content">
+      <div class="pane-group">
+        <div class="pane-one-fifth sidebar">
+          <div class="btn-group center">
+            <button class="btn btn-default btn-large disabled" id="button-mode-man">
+              Manual
+            </button>
+            <button class="btn btn-default btn-large disabled" id="button-mode-gps">
+              GPS
+            </button>
+          </div>
+          <br />
+          <div id="sidebar-content">
+            <p>To start, select a mode.</p>
+          </div>
+        </div>
+        <div class="pane" id="map"></div>
+      </div>
+    </div>
+    <footer class="toolbar toolbar-footer">
+      <div id="board-status">
+        Board not detected: Check connection with board
+      </div>
+    </footer>
+  </div>
+  <script src="index.js"></script>
+</html>
