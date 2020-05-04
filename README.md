@@ -1,5 +1,12 @@
 # Tahoe UV-C Vessel Propulsion System
 
+## Final Evaluation
+In lieu of a packaged Windows executable, the following video provides a demonstration and overview of the project.
+
+ [Tahoe Project Overview and Demo](https://youtu.be/7mDdOYYlIyk)
+ 
+ Posted April 28, 2020
+
 ## Team Members
 
 Alexander Ng
