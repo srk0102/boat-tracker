@@ -1,4 +1,4 @@
-# UV-C Propulsion System
+# Tahoe UV-C Vessel Propulsion System
 
 ## Team Members
 
