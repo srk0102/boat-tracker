@@ -2,7 +2,7 @@
 
 This implementation allows for control of all motors drivers using only joystick
 and Arduino. This method is intended for use in the case of laptop failure and
-the Arduino-GPS/Manual mode cannot be used.
+the Arduino-GPS/Manual mode cannot be used, or if only manual mode is needed.
 
 ## Installation
 
