@@ -4,6 +4,8 @@ This implementation allows for control of all motors drivers using only joystick
 and Arduino. This method is intended for use in the case of laptop failure and
 the Arduino-GPS/Manual mode cannot be used.
 
+## Installation
+
 Setup involves loading the control program directly to the Arduino - no laptop is 
 needed after the program is uploaded.
 
@@ -22,3 +24,5 @@ folder.
 Finally, open the arduino-manual.ino file in the Arduino IDE, connect the board 
 via USB, and click upload to save the program to the board. The board has now
 been prepped for use. 
+
+A more in-depth installation guide (with pictures!) can be found in the wiki
