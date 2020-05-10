@@ -4,8 +4,8 @@
 
 Some users may be unfamiliar with git and Github as a method of source control (keeping records of code). A page in the wiki will be opened to elaborate on the purpose of git and basic usage.
 
-## Final Evaluation
-In lieu of a packaged Windows executable, the following video provides a demonstration and overview of the project.
+## Evaluation
+The following video provides a demonstration and overview of the project.
 
  [Tahoe Project Overview and Demo](https://youtu.be/7mDdOYYlIyk)
  
@@ -14,7 +14,6 @@ In lieu of a packaged Windows executable, the following video provides a demonst
 ## Team Members
 
 Alexander Ng
-
 
 ## Introduction
 
@@ -30,7 +29,7 @@ Manual control can be broken down into two modules: headless and manual-arduino.
 
 ### Automated Control
 
-Utilizing GPS, a user will be able to upload a file containing path data, and our program will navigate the platform along the path. Additionally, the program will log the platforms position and orientation, so treatment coverage can be monitored.
+Utilizing GPS, a user will be able to upload a file containing path data, and our program will navigate the platform along the path. Additionally, the program will log the platform's position and orientation, so treatment coverage can be monitored.
 
 ### Components
 For a list of physical components, see the wiki.
