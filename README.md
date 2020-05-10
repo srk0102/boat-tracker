@@ -1,5 +1,9 @@
 # Tahoe UV-C Vessel Propulsion System
 
+## New to git/Github? (WIP)
+
+Some users may be unfamiliar with git and Github as a method of source control (keeping records of code). A page in the wiki will be opened to elaborate on the purpose of git and basic usage.
+
 ## Final Evaluation
 In lieu of a packaged Windows executable, the following video provides a demonstration and overview of the project.
 
