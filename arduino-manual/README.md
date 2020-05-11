@@ -25,4 +25,4 @@ Finally, open the arduino-manual.ino file in the Arduino IDE, connect the board
 via USB, and click upload to save the program to the board. The board has now
 been prepped for use. 
 
-A more in-depth installation guide (with pictures!) can be found in the wiki
+A more in-depth installation guide (with pictures!) can be found [in the wiki](https://github.com/ngAlexander9/UV-C-Propulsion-System/wiki/Installation-Guide#arduino-manual)
