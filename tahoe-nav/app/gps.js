@@ -1,3 +1,10 @@
+/*
+ * gps.js
+ *
+ * This is a rewrite of the GPS module in johnny-five to accomodate non-GPS GNSS
+ * NMEA strings.
+ * 
+ */
 var events = require("events");
 var util = require("util");
 
