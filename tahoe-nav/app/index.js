@@ -203,8 +203,10 @@ board.on("ready", () => {
   const led = new Led(13);
   var gps = new GPS({
     baud: 9600, // Ideally should be 115200 but looks like serial has issues reading at that rate
-    port: 1, // HWSerial1 (port 1) is on rx 19, tx 18
+    port: 1, // HWSerial1 (port 1) is on rx 19, tx 18, alternatively use this.io.SERIAL_PORT_IDs.HW_SERIAL1
   });
+
+  console.log(gps.io)
 
   // Pins for joystick input
   var pinX = new Pin("A0");

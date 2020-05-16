@@ -282,6 +282,7 @@ GPS.prototype.initialize = function(opts) {
     this.onOff = new Pin(this.pins.onOff);
   }
 
+  // Set up serial IO with correct options (including baud rate)
   this.io.serialConfig({
     portId: state.portId,
     baud: this.baud,
@@ -313,7 +314,7 @@ GPS.prototype.sendCommand = function(string) {
   // Append *, checksum and cr/lf
   var hexsum = getNmeaChecksum(string.substring(1));
   cc.push(42, hexsum.charCodeAt(0), hexsum.charCodeAt(1), 13, 10);
-
+  // IO should have already been configed at this point
   this.io.serialWrite(state.portId, cc);
 };
 
@@ -324,9 +325,10 @@ GPS.prototype.listen = function() {
   
 
   // Start the read loop
+  // IO should have already been configed at this point (baud rate, etc.)
   this.io.serialRead(state.portId, function(data) {
 
-    input += new Buffer(data).toString("ascii");
+    input += new Buffer.from(data).toString("ascii");
     var sentences = input.split("\r\n");
 
     if (sentences.length > 1) {
