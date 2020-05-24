@@ -36,6 +36,14 @@
   width: 100%;
 }
 
+.footer-left {
+  float: left;
+}
+
+.footer-right {
+  float: right;
+}
+
 a:active,
 a:hover {
   outline: 0;
