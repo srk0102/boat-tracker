@@ -50,7 +50,7 @@ const int deadzonerange = 30; // deadzone range in center of joystick
 // Note: 20 is about the bare minimum deadzone while not touching the joystick
 const int center = 512; // analog reads 0-1023, so center is 512
 
-const int timeout = 250;
+const int timeout = 200;
 
 SoftwareSerial SWSerial(NOT_A_PIN, 11);
 Sabertooth LFT(128, SWSerial);
