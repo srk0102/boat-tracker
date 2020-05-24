@@ -176,6 +176,7 @@ var buttonModeMan = document.getElementById("button-mode-man");
 var buttonModeGPS = document.getElementById("button-mode-gps");
 var buttons = document.getElementsByClassName("disabled");
 var boardstatus = document.getElementById("board-status");
+var clock = document.getElementById("clock");
 
 var isManual;
 var isTracking = false;
@@ -224,6 +225,8 @@ board.on("ready", () => {
     setTimeout(() => {
       // LED toggle for debug purposes
       led.toggle();
+      clock.innerHTML = moment().format("h:mm:ss a")
+
       var pos = {
         lat: gps.latitude,
         lng: gps.longitude,
@@ -469,6 +472,7 @@ board.on("ready", () => {
     p.appendChild(sidebarContent);
   }
 
+  // One-time setup
   buttonModeMan.addEventListener("click", function () {
     isManual = true;
     setSidebarContents("man");
@@ -481,6 +485,8 @@ board.on("ready", () => {
     buttonModeMan.classList.remove("active");
     buttonModeGPS.classList.add("active");
   });
+
+  clock.innerHTML = moment().format("h:mm:ss a")
 
   while (buttons.length > 0) {
     buttons[0].classList.remove("disabled");
