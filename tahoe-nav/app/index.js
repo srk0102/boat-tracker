@@ -177,12 +177,14 @@ var buttonModeGPS = document.getElementById("button-mode-gps");
 var buttons = document.getElementsByClassName("disabled");
 var boardstatus = document.getElementById("board-status");
 var clock = document.getElementById("clock");
+var trackingstatus = document.getElementById("tracking-status");
 
 var isManual;
 var isTracking = false;
 var trackedPos = [];
 var hasFix = false;
 var lastLogged;
+var startLog;
 var centerOnPos = true;
 // Joystick config
 const deadZoneRange = 30;
@@ -225,7 +227,25 @@ board.on("ready", () => {
     setTimeout(() => {
       // LED toggle for debug purposes
       led.toggle();
+      // Current time
       clock.innerHTML = moment().format("h:mm:ss a")
+      
+      // Update tracking timer
+      if (isTracking) {
+        duration = moment() - startLog;
+        var seconds = parseInt((duration/1000)%60);
+        var minutes = parseInt((duration/(1000*60))%60);
+        var hours = parseInt((duration/(1000*60*60))%24);
+
+        hours = (hours < 10) ? "0" + hours : hours;
+        minutes = (minutes < 10) ? "0" + minutes : minutes;
+        seconds = (seconds < 10) ? "0" + seconds : seconds;
+
+        trackingstatus.innerHTML = hours + ":" + minutes + ":" + seconds;
+      } else {
+        trackingstatus.innerHTML = "";
+      }
+
 
       var pos = {
         lat: gps.latitude,
@@ -239,11 +259,13 @@ board.on("ready", () => {
 
       // Logging conditions
       if (hasFix && isTracking && moment() - lastLogged > 2000) {
+        // Fix established and currently tracking and last recorded coordinate was > 2s ago
         navlog.info(pos);
         trackedPos.push(pos)
         trackedPath.setPath(trackedPos);
         lastLogged = moment();
       } else if (!hasFix && pos.lat) {
+        // Fix just established
         hasFix = true;
         navlog.info("GNSS Fix established");
       }
@@ -320,6 +342,7 @@ board.on("ready", () => {
       if (isTracking) {
         this.innerHTML = "Stop Tracking";
         this.className = "btn btn-negative btn-large btn-sb";
+        startLog = moment();
         applog.info("Started tracking");
         navlog.info("Started tracking");
       } else {
@@ -431,6 +454,7 @@ board.on("ready", () => {
       if (isTracking) {
         this.innerHTML = "Stop Tracking";
         this.className = "btn btn-negative btn-large btn-sb";
+        startLog = moment();
         applog.info("Started tracking");
         navlog.info("Started tracking");
       } else {
