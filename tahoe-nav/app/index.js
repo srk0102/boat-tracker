@@ -174,6 +174,7 @@ function generatePath() {
 
 var buttonModeMan = document.getElementById("button-mode-man");
 var buttonModeGPS = document.getElementById("button-mode-gps");
+var buttonModeCfg = document.getElementById("button-mode-cfg");
 var buttons = document.getElementsByClassName("disabled");
 var boardstatus = document.getElementById("board-status");
 var clock = document.getElementById("clock");
@@ -208,8 +209,6 @@ board.on("ready", () => {
     baud: 9600, // Ideally should be 115200 but looks like serial has issues reading at that rate
     port: 1, // HWSerial1 (port 1) is on rx 19, tx 18, alternatively use this.io.SERIAL_PORT_IDs.HW_SERIAL1
   });
-
-  console.log(gps.io)
 
   // Pins for joystick input
   var pinX = new Pin("A0");
@@ -479,6 +478,22 @@ board.on("ready", () => {
     return sidebarMAN;
   }
 
+  function makeSidebarCFG() {
+    var sidebarCFG = document.createElement("div");
+
+    var loadPathButton = document.createElement("button");
+    loadPathButton.className = "btn btn-default btn-large btn-sb";
+    loadPathButton.id = "load-path-button";
+    loadPathButton.innerHTML = "Load Path from File";
+    loadPathButton.addEventListener("click", function() {
+      const { dialog } = require('electron').remote;
+      console.log(dialog.showOpenDialog({ properties: ['openFile'] }));
+    })
+
+    sidebarCFG.appendChild(loadPathButton);
+    return sidebarCFG;
+  }
+
   // Driver function for setting sidebar
   function setSidebarContents(mode) {
     var p = document.getElementById("sidebar-content");
@@ -489,9 +504,11 @@ board.on("ready", () => {
     if (mode == "man") {
       sidebarContent = makeSidebarMAN();
       isManual = true;
-    } else {
+    } else if (mode == "gps") {
       sidebarContent = makeSidebarGPS();
       isManual = false;
+    } else {
+      sidebarContent = makeSidebarCFG();
     }
     p.appendChild(sidebarContent);
   }
@@ -502,13 +519,21 @@ board.on("ready", () => {
     setSidebarContents("man");
     buttonModeMan.classList.add("active");
     buttonModeGPS.classList.remove("active");
+    buttonModeCfg.classList.remove("active")
   });
   buttonModeGPS.addEventListener("click", function () {
     isManual = false;
     setSidebarContents("gps");
     buttonModeMan.classList.remove("active");
     buttonModeGPS.classList.add("active");
+    buttonModeCfg.classList.remove("active");
   });
+  buttonModeCfg.addEventListener("click", function() {
+    setSidebarContents("cfg");
+    buttonModeMan.classList.remove("active");
+    buttonModeGPS.classList.remove("active");
+    buttonModeCfg.classList.add("active");
+  })
 
   clock.innerHTML = moment().format("h:mm:ss a")
 
