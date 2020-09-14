@@ -4,6 +4,10 @@
 
 Some users may be unfamiliar with git and Github as a method of source control (keeping records of code). [This page](https://github.com/ngAlexander9/UV-C-Propulsion-System/wiki/git-Github-Overview) in the wiki elaborates on the purpose of git and basic usage.
 
+## Github Desktop
+
+Github Desktop is the GUI (graphical user interface) for git and Github. It is likely easier to use than command-line git for the average user.
+
 ## Evaluation
 The following video provides a demonstration and overview of the project.
 
