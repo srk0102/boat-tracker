@@ -59,7 +59,7 @@ var zoneSelected = false;
 
 function initMap() {
   map = new google.maps.Map(document.getElementById("map"), {
-    center: { lat: 38.959533, lng: -119.951611 }, // Default coord, loop will update with true coord
+    center: { lat: 37.953312, lng: -121.307024 }, // Default coord, loop will update with true coord
     zoom: 18,
     mapTypeId: "satellite",
     mapTypeControl: false,
@@ -94,13 +94,13 @@ function initMap() {
     path: [],
     strokeColor: "#00FF00",
     strokeWeight: 2,
-  })
+  });
 
   vessel = new google.maps.Marker({
     map: map,
     icon: "./assets/vessel.png",
     position: { lat: 38.959533, lng: -119.951611 },
-  })
+  });
 
   google.maps.event.addListener(map, "click", function (clickEvent) {
     if (settingPath) {
@@ -108,9 +108,11 @@ function initMap() {
     } else if (settingZoneState == "setting") {
       if (zone.getPath().length === 0) {
         marker = new google.maps.Marker({
-          map: map, position: clickEvent.latLng, draggable: false
-        })
-        google.maps.event.addListener(marker, 'click', function() {
+          map: map,
+          position: clickEvent.latLng,
+          draggable: false,
+        });
+        google.maps.event.addListener(marker, "click", function () {
           if (isClosed) {
             return;
           }
@@ -129,8 +131,9 @@ function initMap() {
           isClosed = true;
           zoneSelected = true;
           settingZoneState = "ready";
-          document.getElementById("set-zone-button").innerHTML = "Generate Path";
-        })
+          document.getElementById("set-zone-button").innerHTML =
+            "Generate Path";
+        });
       }
       zone.getPath().push(clickEvent.latLng);
     }
@@ -139,24 +142,41 @@ function initMap() {
 
 function generatePath() {
   vertices = zone.getPath();
-  vArray = []
-  for (var i =0; i < vertices.getLength(); i++) {
+  vArray = [];
+  for (var i = 0; i < vertices.getLength(); i++) {
     var xy = vertices.getAt(i);
-    var contentString = '<br>' + 'Coordinate ' + i + ':<br>' + xy.lat() + ',' +
-        xy.lng();
-    vArray.push({lat: xy.lat(), lng: xy.lng()})
+    var contentString =
+      "<br>" + "Coordinate " + i + ":<br>" + xy.lat() + "," + xy.lng();
+    vArray.push({ lat: xy.lat(), lng: xy.lng() });
   }
-  console.log(vArray)
+  console.log(vArray);
   path.getPath().push(vertices.getAt(0));
   path.getPath().push(vertices.getAt(1));
-  var lastpoint = path.getPath().getAt(path.getPath().getLength()-1)
+  var lastpoint = path.getPath().getAt(path.getPath().getLength() - 1);
   var count = 1;
-  var heading = google.maps.geometry.spherical.computeHeading(vertices.getAt(0), vertices.getAt(1));
-  var headinga = google.maps.geometry.spherical.computeHeading(vertices.getAt(1), vertices.getAt(2));
-  var headingb = google.maps.geometry.spherical.computeHeading(vertices.getAt(0), vertices.getAt(vertices.getLength()-1));
+  var heading = google.maps.geometry.spherical.computeHeading(
+    vertices.getAt(0),
+    vertices.getAt(1)
+  );
+  var headinga = google.maps.geometry.spherical.computeHeading(
+    vertices.getAt(1),
+    vertices.getAt(2)
+  );
+  var headingb = google.maps.geometry.spherical.computeHeading(
+    vertices.getAt(0),
+    vertices.getAt(vertices.getLength() - 1)
+  );
   while (google.maps.geometry.poly.containsLocation(lastpoint, zone)) {
-    var a = google.maps.geometry.spherical.computeOffset(vertices.getAt(1), count*2, headinga)
-    var b = google.maps.geometry.spherical.computeOffset(vertices.getAt(0), count*2, headingb)
+    var a = google.maps.geometry.spherical.computeOffset(
+      vertices.getAt(1),
+      count * 2,
+      headinga
+    );
+    var b = google.maps.geometry.spherical.computeOffset(
+      vertices.getAt(0),
+      count * 2,
+      headingb
+    );
     if (count % 2 == 1) {
       path.getPath().push(a);
       path.getPath().push(b);
@@ -168,12 +188,13 @@ function generatePath() {
     }
     count += 1;
   }
-  document.getElementById("set-zone-button").innerHTML = "Select Zone"
-  settingZoneState = "init"
+  document.getElementById("set-zone-button").innerHTML = "Select Zone";
+  settingZoneState = "init";
 }
 
 var buttonModeMan = document.getElementById("button-mode-man");
 var buttonModeGPS = document.getElementById("button-mode-gps");
+var buttonModeCfg = document.getElementById("button-mode-cfg");
 var buttons = document.getElementsByClassName("disabled");
 var boardstatus = document.getElementById("board-status");
 var clock = document.getElementById("clock");
@@ -209,8 +230,6 @@ board.on("ready", () => {
     port: 1, // HWSerial1 (port 1) is on rx 19, tx 18, alternatively use this.io.SERIAL_PORT_IDs.HW_SERIAL1
   });
 
-  console.log(gps.io)
-
   // Pins for joystick input
   var pinX = new Pin("A0");
   var pinY = new Pin("A1");
@@ -228,24 +247,23 @@ board.on("ready", () => {
       // LED toggle for debug purposes
       led.toggle();
       // Current time
-      clock.innerHTML = moment().format("h:mm:ss a")
-      
+      clock.innerHTML = moment().format("h:mm:ss a");
+
       // Update tracking timer
       if (isTracking) {
         duration = moment() - startLog;
-        var seconds = parseInt((duration/1000)%60);
-        var minutes = parseInt((duration/(1000*60))%60);
-        var hours = parseInt((duration/(1000*60*60))%24);
+        var seconds = parseInt((duration / 1000) % 60);
+        var minutes = parseInt((duration / (1000 * 60)) % 60);
+        var hours = parseInt((duration / (1000 * 60 * 60)) % 24);
 
-        hours = (hours < 10) ? "0" + hours : hours;
-        minutes = (minutes < 10) ? "0" + minutes : minutes;
-        seconds = (seconds < 10) ? "0" + seconds : seconds;
+        hours = hours < 10 ? "0" + hours : hours;
+        minutes = minutes < 10 ? "0" + minutes : minutes;
+        seconds = seconds < 10 ? "0" + seconds : seconds;
 
         trackingstatus.innerHTML = hours + ":" + minutes + ":" + seconds;
       } else {
         trackingstatus.innerHTML = "";
       }
-
 
       var pos = {
         lat: gps.latitude,
@@ -261,7 +279,7 @@ board.on("ready", () => {
       if (hasFix && isTracking && moment() - lastLogged > 2000) {
         // Fix established and currently tracking and last recorded coordinate was > 2s ago
         navlog.info(pos);
-        trackedPos.push(pos)
+        trackedPos.push(pos);
         trackedPath.setPath(trackedPos);
         lastLogged = moment();
       } else if (!hasFix && pos.lat) {
@@ -370,7 +388,7 @@ board.on("ready", () => {
         });
         settingZoneState = "setting";
       } else if (settingZoneState == "setting") {
-        setZoneButton.innerHTML = "Select Zone"
+        setZoneButton.innerHTML = "Select Zone";
         zone.setMap(null);
         zone = new google.maps.Polyline({
           map: map,
@@ -405,7 +423,7 @@ board.on("ready", () => {
     clearButton.innerHTML = "Clear Zones/Paths";
     clearButton.addEventListener("click", function () {
       path.setPath([]);
-      path.setMap(null)
+      path.setMap(null);
       zone.setPath([]);
       zone.setPath(null);
     });
@@ -479,6 +497,53 @@ board.on("ready", () => {
     return sidebarMAN;
   }
 
+  function makeSidebarCFG() {
+    var sidebarCFG = document.createElement("div");
+
+    // Button to load previous paths from log file and then draw on map
+    var loadPathButton = document.createElement("button");
+    loadPathButton.className = "btn btn-default btn-large btn-sb";
+    loadPathButton.id = "load-path-button";
+    loadPathButton.innerHTML = "Load Path from File";
+    loadPathButton.addEventListener("click", function () {
+      const { dialog } = require("electron").remote
+      filepath = dialog.showOpenDialogSync({title: "Open Log File", filters: [{name: "Log Files", extensions: ['log']}]})[0]
+      fs.readFile(filepath, 'utf-8', (err, data) => {
+        if(err) {
+          alert("An error ocurred reading the file :" + err.message);
+          return;
+        }
+        var dataArray = data.toString().split("\n"); // Log lines in array
+        var coords = []
+        dataArray.forEach(function(item, index) {
+          item = item.split("] ")[2] // Regex to isolate content
+          if (item != undefined && item[0] == "{") { // Line holds a coordinate
+            item = item.split(": ")
+            var lat = item[1].split(",")[0] // Isolate lat/lng
+            var lng = item[2].split(" ")[0]
+            coords.push({lat: parseFloat(lat), lng: parseFloat(lng)});
+          }
+        })
+        console.log(coords)
+        if (coords.length > 0) {
+          var path = new google.maps.Polyline({
+            path: coords,
+            geodesic: true,
+            strokeColor: '#FFFFFF',
+            strokeOpacity: 1.0,
+            strokeWeight: 3
+          });
+          path.setMap(map);
+        } else {
+          console.log("Error: coords holds no coordinates")
+        }
+      })
+    });
+
+    sidebarCFG.appendChild(loadPathButton);
+    return sidebarCFG;
+  }
+
   // Driver function for setting sidebar
   function setSidebarContents(mode) {
     var p = document.getElementById("sidebar-content");
@@ -489,9 +554,11 @@ board.on("ready", () => {
     if (mode == "man") {
       sidebarContent = makeSidebarMAN();
       isManual = true;
-    } else {
+    } else if (mode == "gps") {
       sidebarContent = makeSidebarGPS();
       isManual = false;
+    } else {
+      sidebarContent = makeSidebarCFG();
     }
     p.appendChild(sidebarContent);
   }
@@ -502,15 +569,23 @@ board.on("ready", () => {
     setSidebarContents("man");
     buttonModeMan.classList.add("active");
     buttonModeGPS.classList.remove("active");
+    buttonModeCfg.classList.remove("active");
   });
   buttonModeGPS.addEventListener("click", function () {
     isManual = false;
     setSidebarContents("gps");
     buttonModeMan.classList.remove("active");
     buttonModeGPS.classList.add("active");
+    buttonModeCfg.classList.remove("active");
+  });
+  buttonModeCfg.addEventListener("click", function () {
+    setSidebarContents("cfg");
+    buttonModeMan.classList.remove("active");
+    buttonModeGPS.classList.remove("active");
+    buttonModeCfg.classList.add("active");
   });
 
-  clock.innerHTML = moment().format("h:mm:ss a")
+  clock.innerHTML = moment().format("h:mm:ss a");
 
   while (buttons.length > 0) {
     buttons[0].classList.remove("disabled");
