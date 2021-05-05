@@ -217,18 +217,39 @@ const FR2address = 130;
 const RGTaddress = 131;
 
 const { Board, Led, Pin } = require("johnny-five");
-const GPS = require("./gps");
+// const GPS = require("./gps"); old gps
+var file = 'COM5';
+const SerialPort = require('serialport');
+const parsers = SerialPort.parsers;
+const parser = new parsers.Readline({
+  delimiter: '\r\n'
+});
+const port = new SerialPort(file, {
+  baudRate: 9600
+});
+port.pipe(parser);
+var GPS = require('gps');
+var gps = new GPS;
+gps.on('data', function(data) {
+  //console.log(gps.state);
+});
+parser.on('data', function(data) {
+  gps.update(data);
+});
 
 const board = new Board({
   repl: false, // important! enabling repl crashes electron
+  port: "COM4"
 });
 
 board.on("ready", () => {
   const led = new Led(13);
-  var gps = new GPS({
-    baud: 9600, // Ideally should be 115200 but looks like serial has issues reading at that rate
-    port: 1, // HWSerial1 (port 1) is on rx 19, tx 18, alternatively use this.io.SERIAL_PORT_IDs.HW_SERIAL1
-  });
+
+  // old gps
+  //var gps = new GPS({
+  //  baud: 9600, // Ideally should be 115200 but looks like serial has issues reading at that rate
+  //  port: 1, // HWSerial1 (port 1) is on rx 19, tx 18, alternatively use this.io.SERIAL_PORT_IDs.HW_SERIAL1
+  //});
 
   // Pins for joystick input
   var pinX = new Pin("A0");
@@ -266,9 +287,10 @@ board.on("ready", () => {
       }
 
       var pos = {
-        lat: gps.latitude,
-        lng: gps.longitude,
+        lat: gps.state.lat,
+        lng: gps.state.lon,
       };
+      
       var [intX, intY, intZ] = getJoystickIntent();
 
       if (hasFix) {
@@ -276,7 +298,7 @@ board.on("ready", () => {
       }
 
       // Logging conditions
-      if (hasFix && isTracking && moment() - lastLogged > 2000) {
+      if (hasFix && isTracking && moment() - lastLogged > 500) {
         // Fix established and currently tracking and last recorded coordinate was > 2s ago
         navlog.info(pos);
         trackedPos.push(pos);
