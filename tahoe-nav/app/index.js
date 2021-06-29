@@ -539,7 +539,7 @@ board.on("ready", () => {
         var coords = []
         dataArray.forEach(function(item, index) {
           item = item.split("] ")[2] // Regex to isolate content
-          if (item != undefined && item[0] == "{") { // Line holds a coordinate
+          if (item != undefined && item[1] == "{") { // Line holds a coordinate
             item = item.split(": ")
             var lat = item[1].split(",")[0] // Isolate lat/lng
             var lng = item[2].split(" ")[0]
