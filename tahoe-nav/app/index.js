@@ -29,6 +29,7 @@ const navlog = applog.create("anotherInstance");
 applog.transports.file.file = "app.log";
 navlog.transports.file.file = moment().format("MMM-DD-YYYY") + ".log";
 navlog.transports.console.level = false;
+navlog.transports.file.maxSize = 0; // Disable log rollover to prevent overwriting
 applog.info("App Started");
 
 // Set up API for maps
