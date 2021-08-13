@@ -5,10 +5,12 @@ DEFAULT_OUTPUT = "output.csv"
 
 file = open(sys.argv[1])
 
+output_file = sys.argv[2]
+
 lines = file.read().splitlines()
 
 file.close()
-with open(DEFAULT_OUTPUT, mode="w") as output_file:
+with open(output_file, mode="w", newline="") as output_file:
     output_writer = csv.writer(output_file, delimiter = ',', quotechar = '"', quoting=csv.QUOTE_MINIMAL)
     output_writer.writerow(["type", "time", "latitude", "longitude"])
     for line in lines:
