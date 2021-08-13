@@ -1,3 +1,18 @@
+"""
+logtocsv.py
+
+Alexander Ng
+8/13/2021
+
+logtocsv.py takes in a log file from tahoe-nav and converts it to csv
+optional argument to name filename, otherwise will be called output.csv.
+
+Usage:
+
+python logtocsv.py inputfile.log [outputfile.csv]
+
+"""
+
 import csv
 import sys
 
@@ -5,7 +20,10 @@ DEFAULT_OUTPUT = "output.csv"
 
 file = open(sys.argv[1])
 
-output_file = sys.argv[2]
+if len(sys.argv) > 2:
+    output_file = sys.argv[2]
+else:
+    output_file = DEFAULT_OUTPUT
 
 lines = file.read().splitlines()
 
