@@ -61,6 +61,7 @@ def main():
         for file in os.listdir("."):
             if file.endswith(".log") and not file == "app.log":
                 output_file = "CSV-" + os.path.splitext(file)[0] + ".csv"
+                print(f"Reading in {file} and outputting to {output_file}")
                 process_script(file, output_file)
 
 
