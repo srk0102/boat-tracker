@@ -54,7 +54,7 @@ def main():
         process_script(sys.argv[1], sys.argv[2])
     elif len(sys.argv) == 2:
         """Input file argument given, output file is default name"""
-        print(f"Reading in {sys.argv[1]} and outputting to {sys.argv[2]}")
+        print(f"Reading in {sys.argv[1]} and outputting to {DEFAULT_OUTPUT}")
         process_script(sys.argv[1], DEFAULT_OUTPUT)
     else:
         """No arguments are given, script run on all .log files"""
