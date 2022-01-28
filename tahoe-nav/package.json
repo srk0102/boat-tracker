@@ -12,8 +12,10 @@
     "electron-rebuild": "^1.11.0"
   },
   "dependencies": {
+    "convert-units": "^2.3.4",
     "electron-log": "^4.4.4",
     "gps": "^0.6.0",
+    "haversine": "^1.1.1",
     "johnny-five": "^1.4.0",
     "moment": "^2.24.0",
     "serialport": "^9.2.8"

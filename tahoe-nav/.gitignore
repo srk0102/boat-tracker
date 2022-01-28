@@ -1,2 +1,8 @@
 node_modules
 *.csv
+*.log
+/logtocsv/env
+*.spec
+/logtocsv/build
+/logtocsv/dist
+/logtocsv/__pycache__

@@ -47,7 +47,18 @@ js_file.src =
   "&language=en&libraries=geometry";
 document.getElementsByTagName("head")[0].appendChild(js_file);
 
+// Import functions
+const { updateDistTable } = require("./sidebarMAN");
+const { setSidebarContents } = require("./sidebar");
+
+// Data for gps distance
+const haversine = require("haversine");
+const convert = require("convert-units");
+var disttableheader = ["", "Lat.", "Lon.", 	"\u0394Lat. (ft)", "\u0394Lon. (ft)", "Dist.(ft)"];
+var disttabledata = [["Curr. Pos.", "", "", "0", "0", 0]];
+
 var map; // Map Object
+var markers = []; // Markers for distance points
 var zone; // Treatment zone polygon
 var zonepath;
 var path; // Generated treatment path
@@ -202,6 +213,7 @@ var clock = document.getElementById("clock");
 var trackingstatus = document.getElementById("tracking-status");
 
 var isManual;
+var pos;
 var isTracking = false;
 var trackedPos = [];
 var hasFix = false;
@@ -210,22 +222,22 @@ var startLog;
 var centerOnPos = true;
 
 // const GPS = require("./gps"); old gps
-var file = 'COM12';
-const SerialPort = require('serialport');
+var file = "COM12";
+const SerialPort = require("serialport");
 const parsers = SerialPort.parsers;
 const parser = new parsers.Readline({
-  delimiter: '\r\n'
+  delimiter: "\r\n",
 });
 const port = new SerialPort(file, {
-  baudRate: 9600
+  baudRate: 9600,
 });
 port.pipe(parser);
-var GPS = require('gps');
-var gps = new GPS;
-gps.on('data', function(data) {
+var GPS = require("gps");
+var gps = new GPS();
+gps.on("data", function (data) {
   //console.log(gps.state);
 });
-parser.on('data', function(data) {
+parser.on("data", function (data) {
   gps.update(data);
 });
 
@@ -235,7 +247,6 @@ boardstatus.innerHTML = "No Arduino Connected (not required)";
 
 function loop() {
   setTimeout(() => {
-
     // Current time
     clock.innerHTML = moment().format("h:mm:ss a");
 
@@ -255,13 +266,19 @@ function loop() {
       trackingstatus.innerHTML = "";
     }
 
-    var pos = {
+    pos = {
       lat: gps.state.lat,
       lng: gps.state.lon,
     };
-    
+
+    // GPS Fix
     if (hasFix) {
       vessel.setPosition(pos);
+    }
+
+    // Update gps distance table, if it exists
+    if (hasFix && document.getElementById("coord-table-container")) {
+      updateDistTable(); // TODO: check performance, might be updating too often
     }
 
     // Logging conditions
@@ -286,232 +303,7 @@ function loop() {
   }, 100);
 }
 
-// Creates Sidebar view for GPS mode
-function makeSidebarGPS() {
-  settingPath = false;
-  settingZoneState = "init";
 
-  var sidebarGPS = document.createElement("div");
-
-  var text = document.createElement("p");
-  text.innerHTML = "GPS Mode active";
-
-  var trackingButton = document.createElement("button");
-  trackingButton.id = "tracking-button";
-  if (isTracking) {
-    trackingButton.innerHTML = "Stop Tracking";
-    trackingButton.className = "btn btn-negative btn-large btn-sb";
-  } else {
-    trackingButton.innerHTML = "Start Tracking";
-    trackingButton.className = "btn btn-positive btn-large btn-sb";
-  }
-  trackingButton.addEventListener("click", function () {
-    isTracking = !isTracking;
-    if (isTracking) {
-      this.innerHTML = "Stop Tracking";
-      this.className = "btn btn-negative btn-large btn-sb";
-      startLog = moment();
-      applog.info("Started tracking");
-      navlog.info("Started tracking");
-    } else {
-      this.innerHTML = "Start Tracking";
-      this.className = "btn btn-positive btn-large btn-sb";
-      applog.info("Stopped tracking");
-      navlog.info("Stopped tracking");
-    }
-  });
-
-  var setZoneButton = document.createElement("button");
-  setZoneButton.className = "btn btn-default btn-large btn-sb";
-  setZoneButton.id = "set-zone-button";
-  setZoneButton.innerHTML = "Select Zone";
-  setZoneButton.addEventListener("click", function () {
-    if (settingZoneState == "init") {
-      setZoneButton.innerHTML = "Cancel";
-      zone.setMap(null);
-      zone = new google.maps.Polyline({
-        map: map,
-        path: [],
-        strokeColor: "#FF0000",
-        strokeOpacity: 1.0,
-        strokeWeight: 2,
-      });
-      settingZoneState = "setting";
-    } else if (settingZoneState == "setting") {
-      setZoneButton.innerHTML = "Select Zone";
-      zone.setMap(null);
-      zone = new google.maps.Polyline({
-        map: map,
-        path: [],
-        strokeColor: "#FF0000",
-        strokeOpacity: 1.0,
-        strokeWeight: 2,
-      });
-      settingZoneState = "init";
-    } else if (settingZoneState == "ready") {
-      generatePath();
-    }
-  });
-
-  var createPathButton = document.createElement("button");
-  createPathButton.className = "btn btn-default btn-large btn-sb";
-  createPathButton.id = "create-path-button";
-  createPathButton.innerHTML = "Create Path";
-  createPathButton.addEventListener("click", function () {
-    settingPath = !settingPath;
-    if (settingPath) {
-      this.innerHTML = "End Path";
-    } else {
-      this.innerHTML = "Create Path";
-      applog.info("Path manually created");
-    }
-  });
-
-  var clearButton = document.createElement("button");
-  clearButton.className = "btn btn-default btn-large btn-sb";
-  clearButton.id = "clear-button";
-  clearButton.innerHTML = "Clear Zones/Paths";
-  clearButton.addEventListener("click", function () {
-    path.setPath([]);
-    path.setMap(null);
-    zone.setPath([]);
-    zone.setPath(null);
-  });
-
-  var startPathButton = document.createElement("button");
-  startPathButton.className = "btn btn-default btn-large btn-sb disabled";
-  startPathButton.id = "start-path-button";
-  startPathButton.innerHTML = "Start Path";
-
-  var centerOnPosButton = document.createElement("button");
-  centerOnPosButton.className = "btn btn-default btn-large btn-sb";
-  centerOnPosButton.id = "center-on-pos-button";
-  centerOnPosButton.innerHTML = "Center on Pos";
-  centerOnPosButton.addEventListener("click", function () {
-    centerOnPos = true;
-  });
-
-  sidebarGPS.appendChild(text);
-  sidebarGPS.appendChild(trackingButton);
-  sidebarGPS.appendChild(setZoneButton);
-  sidebarGPS.appendChild(createPathButton);
-  sidebarGPS.appendChild(clearButton);
-  sidebarGPS.appendChild(startPathButton);
-  sidebarGPS.appendChild(centerOnPosButton);
-  return sidebarGPS;
-}
-
-// Creates Sidebar view for Manual mode
-function makeSidebarMAN() {
-  var sidebarMAN = document.createElement("div");
-
-  var text = document.createElement("p");
-  text.innerHTML = "Manual Mode active";
-
-  var trackingButton = document.createElement("button");
-  trackingButton.id = "tracking-button";
-  if (isTracking) {
-    trackingButton.innerHTML = "Stop Tracking";
-    trackingButton.className = "btn btn-negative btn-large btn-sb";
-  } else {
-    trackingButton.innerHTML = "Start Tracking";
-    trackingButton.className = "btn btn-positive btn-large btn-sb";
-  }
-  trackingButton.addEventListener("click", function () {
-    isTracking = !isTracking;
-    if (isTracking) {
-      this.innerHTML = "Stop Tracking";
-      this.className = "btn btn-negative btn-large btn-sb";
-      startLog = moment();
-      applog.info("Started tracking");
-      navlog.info("Started tracking");
-    } else {
-      this.innerHTML = "Start Tracking";
-      this.className = "btn btn-positive btn-large btn-sb";
-      applog.info("Stopped tracking");
-      navlog.info("Stopped tracking");
-    }
-  });
-
-  var centerOnPosButton = document.createElement("button");
-  centerOnPosButton.className = "btn btn-default btn-large btn-sb";
-  centerOnPosButton.id = "center-on-pos-button";
-  centerOnPosButton.innerHTML = "Center on Pos";
-  centerOnPosButton.addEventListener("click", function () {
-    centerOnPos = true;
-  });
-
-  sidebarMAN.appendChild(text);
-  sidebarMAN.appendChild(trackingButton);
-  sidebarMAN.appendChild(centerOnPosButton);
-  return sidebarMAN;
-}
-
-function makeSidebarCFG() {
-  var sidebarCFG = document.createElement("div");
-
-  // Button to load previous paths from log file and then draw on map
-  var loadPathButton = document.createElement("button");
-  loadPathButton.className = "btn btn-default btn-large btn-sb";
-  loadPathButton.id = "load-path-button";
-  loadPathButton.innerHTML = "Load Path from File";
-  loadPathButton.addEventListener("click", function () {
-    const { dialog } = require("electron").remote
-    filepath = dialog.showOpenDialogSync({title: "Open Log File", filters: [{name: "Log Files", extensions: ['log']}]})[0]
-    fs.readFile(filepath, 'utf-8', (err, data) => {
-      if(err) {
-        alert("An error ocurred reading the file :" + err.message);
-        return;
-      }
-      var dataArray = data.toString().split("\n"); // Log lines in array
-      var coords = []
-      dataArray.forEach(function(item, index) {
-        item = item.split("] ")[2] // Regex to isolate content
-        if (item != undefined && item[1] == "{") { // Line holds a coordinate
-          item = item.split(": ")
-          var lat = item[1].split(",")[0] // Isolate lat/lng
-          var lng = item[2].split(" ")[0]
-          coords.push({lat: parseFloat(lat), lng: parseFloat(lng)});
-        }
-      })
-      console.log(coords)
-      if (coords.length > 0) {
-        var path = new google.maps.Polyline({
-          path: coords,
-          geodesic: true,
-          strokeColor: '#FFFFFF',
-          strokeOpacity: 1.0,
-          strokeWeight: 3
-        });
-        path.setMap(map);
-      } else {
-        console.log("Error: coords holds no coordinates")
-      }
-    })
-  });
-
-  sidebarCFG.appendChild(loadPathButton);
-  return sidebarCFG;
-}
-
-// Driver function for setting sidebar
-function setSidebarContents(mode) {
-  var p = document.getElementById("sidebar-content");
-  while (p.firstChild) {
-    p.removeChild(p.lastChild);
-  }
-  var sidebarContent;
-  if (mode == "man") {
-    sidebarContent = makeSidebarMAN();
-    isManual = true;
-  } else if (mode == "gps") {
-    sidebarContent = makeSidebarGPS();
-    isManual = false;
-  } else {
-    sidebarContent = makeSidebarCFG();
-  }
-  p.appendChild(sidebarContent);
-}
 
 // One-time setup
 buttonModeMan.addEventListener("click", function () {
@@ -544,4 +336,3 @@ applog.info("Board initialized");
 navlog.info("App started, waiting for fix");
 lastLogged = moment();
 loop();
-
