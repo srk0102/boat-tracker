@@ -78,6 +78,7 @@ function initMap() {
     tilt: 0,
     rotateControl: false,
     streetViewControl: false,
+    scaleControl: true,
   });
 
   google.maps.event.addListener(map, "dragstart", function () {
