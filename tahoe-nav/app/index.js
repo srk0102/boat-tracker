@@ -32,8 +32,13 @@ navlog.transports.console.level = false;
 navlog.transports.file.maxSize = 0; // Disable log rollover to prevent overwriting
 applog.info("App Started");
 
+// Set up JSON config
+let rawdata = fs.readFileSync("./config.json");
+let configdata = JSON.parse(rawdata);
+console.log(configdata);
+
 // Set up API for maps
-const API_KEY = fs.readFileSync("./key.txt", "utf-8");
+const API_KEY = configdata.mapsApiKey;
 if (API_KEY.length < 1) {
   console.log("API key failed to load: check key.txt");
   applog.error("API Key not found");
@@ -223,13 +228,13 @@ var startLog;
 var centerOnPos = true;
 
 // const GPS = require("./gps"); old gps
-var file = "COM12";
+var gpsPort = configdata.gpsPort;
 const SerialPort = require("serialport");
 const parsers = SerialPort.parsers;
 const parser = new parsers.Readline({
   delimiter: "\r\n",
 });
-const port = new SerialPort(file, {
+const port = new SerialPort(gpsPort, {
   baudRate: 9600,
 });
 port.pipe(parser);
