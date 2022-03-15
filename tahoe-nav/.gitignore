@@ -6,3 +6,4 @@ node_modules
 /logtocsv/build
 /logtocsv/dist
 /logtocsv/__pycache__
+config.json
