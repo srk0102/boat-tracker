@@ -180,6 +180,7 @@ function updateDistTable() {
 function addMarker(position) {
   const marker = new google.maps.Marker({
     position,
+    icon: "./assets/pin11.png",
     label: `${markers.length + 1}`,
     map,
   });
