@@ -40,9 +40,59 @@ function makeSidebarCFG() {
         }
       })
     });
+
+    // Button to load reference points (geofence, etc.)
+    var loadRefButton = document.createElement("button");
+    loadRefButton.className = "btn btn-default btn-large btn-sb";
+    loadRefButton.id = "load-ref-button";
+    loadRefButton.innerHTML = "Load Reference Points from File";
+    loadRefButton.addEventListener("click", function() {
+      const { dialog } = require("electron").remote
+      filePathRef = dialog.showOpenDialogSync({title: "Open Reference File", filters: [{name: "Log Files", extensions: ['log']}]})[0]
+      fs.readFile(filePathRef, 'utf-8', (err, data) => {
+        if(err) {
+          alert("An error ocurred reading the file :" + err.message);
+          return;
+        }
+        var dataArrayRef = data.toString().split("\n"); // Log lines in array
+        var coordsRef = []
+        dataArrayRef.forEach(function(item, index) {
+          item = item.split("\t"); // Regex to isolate content
+          item = item.slice(-2);
+          if (item.length == 2) { // Line holds a coordinate
+            var lat = item[0]
+            var lng = item[1]
+            coordsRef.push({lat: parseFloat(lat), lng: parseFloat(lng)});
+          }
+        })
+        markersRef = []
+        if (coordsRef.length > 0) {
+          coordsRef.forEach(function(item, index) {
+            addMarker(item);
+          })
+        } else {
+          console.log("Error: coordsRef holds no coordinates")
+        }
+      })
+    });
   
     sidebarCFG.appendChild(loadPathButton);
+    sidebarCFG.appendChild(loadRefButton);
     return sidebarCFG;
-  }
+}
+
+// Adds a reference marker to the map.
+function addMarker(position) {
+  const marker = new google.maps.Marker({
+    position,
+    icon: "./assets/pin11green.png",
+    label: {
+      text: `R`,
+      fontSize:"10px",
+    },
+    map,
+  });
+
+}
 
 module.exports = { makeSidebarCFG };

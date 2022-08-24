@@ -76,7 +76,7 @@ var zoneSelected = false;
 
 function initMap() {
   map = new google.maps.Map(document.getElementById("map"), {
-    center: { lat: 37.953312, lng: -121.307024 }, // Default coord, loop will update with true coord
+    center: { lat: 38.9322965, lng: -120.0122977 }, // Default coord, loop will update with true coord
     zoom: 18,
     mapTypeId: "satellite",
     mapTypeControl: false,
