@@ -11,18 +11,18 @@ class DirectGPSReader extends EventEmitter {
     this.gpsProcess = null;
     this.isConnected = false;
     
-    // Initialize GPS smoothing filter
+    // Initialize GPS smoothing filter - OPTIMIZED FOR SPEED
     this.gpsFilter = new PoseFilter({
       preferRTK: false,
-      maxHAccM: 2.0,        // 2m accuracy for basic GPS
-      deadbandM: 0.5,       // 50cm deadband
-      minSats: 8,           // Minimum satellites
-      emaAlpha: 0.25
+      maxHAccM: 3.0,        // 3m accuracy (relaxed for faster updates)
+      deadbandM: 0.1,       // 10cm deadband (much more responsive)
+      minSats: 4,           // Minimum satellites (reduced for faster updates)
+      emaAlpha: 0.6,        // More responsive smoothing
+      require3D: false      // Don't require 3D fix
     });
   }
 
   connect() {
-    console.log(`🔍 Connecting to GPS on ${this.port} at ${this.baudRate} baud...`);
     
     // Create a PowerShell script to read from serial port
     const script = `
@@ -55,11 +55,9 @@ class DirectGPSReader extends EventEmitter {
       lines.forEach(line => {
         const trimmed = line.trim();
         if (trimmed === 'GPS_CONNECTED') {
-          console.log('✅ GPS connected successfully!');
           this.isConnected = true;
           this.emit('connected');
         } else if (trimmed.startsWith('$G')) {
-          console.log('📡 GPS NMEA:', trimmed);
           this.parseNMEA(trimmed);
         }
       });
@@ -74,7 +72,6 @@ class DirectGPSReader extends EventEmitter {
     });
 
     this.gpsProcess.on('close', (code) => {
-      console.log(`GPS process exited with code ${code}`);
       this.isConnected = false;
       this.emit('disconnect');
     });
@@ -111,14 +108,6 @@ class DirectGPSReader extends EventEmitter {
           const smoothed = this.gpsFilter.update(fix);
           
           if (smoothed) {
-            console.log('📍 GPS Fix (Filtered):', { 
-              lat: smoothed.lat.toFixed(6), 
-              lng: smoothed.lon.toFixed(6), 
-              speed: speed, 
-              course: course 
-            });
-            console.log('📍 Filter Stats:', smoothed.stats);
-            
             this.emit('data', { 
               lat: smoothed.lat, 
               lng: smoothed.lon, 
@@ -126,11 +115,15 @@ class DirectGPSReader extends EventEmitter {
               course: course 
             });
           } else {
-            console.log('📍 GPS Fix (Filtered out):', 
-              `Raw: Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}, Speed: ${speed} kts`);
+            // Raw data if filtering fails
+            this.emit('data', { 
+              lat: lat, 
+              lng: lng, 
+              speed: speed, 
+              course: course 
+            });
           }
         } else {
-          console.log('❌ GPS: No fix (status:', parts[2], ')');
         }
       } else if (parts[0] === '$GNGGA' || parts[0] === '$GPGGA') {
         if (parts[6] !== '0') { // Valid fix
@@ -160,12 +153,6 @@ class DirectGPSReader extends EventEmitter {
           const smoothed = this.gpsFilter.update(fix);
           
           if (smoothed) {
-            console.log('📍 GPS GGA Fix (Filtered):', { 
-              lat: smoothed.lat.toFixed(6), 
-              lng: smoothed.lon.toFixed(6), 
-              altitude: altitude 
-            });
-            
             this.emit('data', { 
               lat: smoothed.lat, 
               lng: smoothed.lon, 
@@ -173,11 +160,15 @@ class DirectGPSReader extends EventEmitter {
               course: 0 
             });
           } else {
-            console.log('📍 GPS GGA Fix (Filtered out):', 
-              `Raw: Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}`);
+            // Raw data if filtering fails
+            this.emit('data', { 
+              lat: lat, 
+              lng: lng, 
+              speed: 0, 
+              course: 0 
+            });
           }
         } else {
-          console.log('❌ GPS GGA: No fix');
         }
       }
     } catch (error) {

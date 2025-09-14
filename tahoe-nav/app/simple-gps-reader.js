@@ -13,7 +13,6 @@ class SimpleGPSReader extends EventEmitter {
 
   connect() {
     try {
-      console.log(`🔍 Connecting to GPS on ${this.port} at ${this.baudRate} baud...`);
       
       // Create GPS instance with Johnny-Five
       this.gps = new GPS({
@@ -22,7 +21,6 @@ class SimpleGPSReader extends EventEmitter {
       });
 
       this.gps.on('data', (data) => {
-        console.log('📍 GPS Data:', data);
         if (data.latitude && data.longitude) {
           this.emit('data', {
             lat: data.latitude,
@@ -34,15 +32,12 @@ class SimpleGPSReader extends EventEmitter {
       });
 
       this.gps.on('sentence', (sentence) => {
-        console.log('📡 GPS NMEA:', sentence);
       });
 
       this.gps.on('change', (data) => {
-        console.log('🔄 GPS Position Changed:', data);
       });
 
       this.gps.on('navigation', (data) => {
-        console.log('🧭 GPS Navigation:', data);
       });
 
       this.gps.on('error', (err) => {
@@ -52,7 +47,6 @@ class SimpleGPSReader extends EventEmitter {
 
       this.isConnected = true;
       this.emit('connected');
-      console.log('✅ GPS connected successfully!');
 
     } catch (error) {
       console.error('❌ Failed to create GPS connection:', error);

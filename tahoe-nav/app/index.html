@@ -3,7 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="stylesheet" href="styles.css" />
-    <link href='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css' rel='stylesheet' />
+    <!-- Polyfill for replaceChildren (browser compatibility) -->
+    <script>
+      if (!Element.prototype.replaceChildren) {
+        Element.prototype.replaceChildren = function(...nodes) {
+          this.innerHTML = '';
+          this.append(...nodes);
+        };
+      }
+    </script>
+    <!-- Google Maps API will be loaded dynamically -->
     <meta
       http-equiv="Content-Security-Policy"
       content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https:; worker-src 'self' blob:;"
@@ -44,5 +53,5 @@
       </div>
     </footer>
   </div>
-  <script src="index.js"></script>
+  <script src="index-google-maps.js"></script>
 </html>

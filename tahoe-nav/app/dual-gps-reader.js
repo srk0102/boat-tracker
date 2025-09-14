@@ -20,27 +20,27 @@ class DualGPSReader extends EventEmitter {
     this.baseData = null;
     this.isConnected = false;
     
-    // Initialize GPS smoothing filters
+    // Initialize GPS smoothing filters - OPTIMIZED FOR SPEED
     this.roverFilter = new PoseFilter({
       preferRTK: false,     // Set to true when RTK corrections are flowing
-      maxHAccM: 1.5,        // 1.5m accuracy for indoor testing
-      deadbandM: 0.3,       // 30cm deadband for "on table" hold
-      minSats: 8,           // Minimum satellites for indoor
-      emaAlpha: 0.3         // Slightly more responsive
+      maxHAccM: 3.0,        // 3m accuracy (relaxed for faster updates)
+      deadbandM: 0.1,       // 10cm deadband (much more responsive)
+      minSats: 4,           // Minimum satellites (reduced for faster updates)
+      emaAlpha: 0.6,        // More responsive smoothing
+      require3D: false      // Don't require 3D fix
     });
     
     this.baseFilter = new PoseFilter({
       preferRTK: false,
-      maxHAccM: 2.0,        // Base can be less accurate
-      deadbandM: 0.5,       // 50cm deadband for base
-      minSats: 6,           // Base needs fewer satellites
-      emaAlpha: 0.25
+      maxHAccM: 4.0,        // Base can be less accurate (relaxed)
+      deadbandM: 0.2,       // 20cm deadband for base (more responsive)
+      minSats: 4,           // Base needs fewer satellites (reduced)
+      emaAlpha: 0.5,        // More responsive
+      require3D: false      // Don't require 3D fix
     });
   }
 
   connect() {
-    console.log(`Connecting to Rover GPS on ${this.roverPort}...`);
-    console.log(`Connecting to Base Station GPS on ${this.basePort}...`);
     
     this.connectRover();
     this.connectBase();
@@ -48,11 +48,8 @@ class DualGPSReader extends EventEmitter {
     // Add timeout to check if we're getting data
     setTimeout(() => {
       if (!this.roverData) {
-        console.log('🔵 ⚠️ No rover data received after 10 seconds - check rover GPS connection');
       }
       if (!this.baseData) {
-        console.log('🟡 ⚠️ No base data received after 10 seconds - base GPS may need satellite fix');
-        console.log('💡 System will work with rover GPS only until base gets fix');
       }
     }, 10000);
   }
@@ -75,11 +72,9 @@ class DualGPSReader extends EventEmitter {
       this.roverSerial.open((err) => {
         if (err) {
           console.error('🔵 Rover GPS Error:', err.message);
-          console.log('🔵 Trying alternative baud rates...');
           this.tryAlternativeBaudRates();
           return;
         }
-        console.log('🔵 Rover GPS connected');
         this.emit('roverConnected', true);
       });
 
@@ -117,7 +112,6 @@ class DualGPSReader extends EventEmitter {
       });
 
       this.roverSerial.on('close', () => {
-        console.log('🔵 Rover GPS disconnected');
         this.isConnected = false;
         this.emit('disconnect');
       });
@@ -149,7 +143,6 @@ class DualGPSReader extends EventEmitter {
           this.emit('baseConnected', false);
           return;
         }
-        console.log('🟡 Base GPS connected');
         this.emit('baseConnected', true);
       });
 
@@ -170,7 +163,6 @@ class DualGPSReader extends EventEmitter {
       });
 
       this.baseSerial.on('close', () => {
-        console.log('🟡 Base GPS disconnected');
       });
 
     } catch (error) {
@@ -220,17 +212,11 @@ class DualGPSReader extends EventEmitter {
                 course: course 
               };
               
-              console.log('🔵 Rover GPS Fix (Filtered):', 
-                `Lat: ${smoothed.lat.toFixed(6)}, Lng: ${smoothed.lon.toFixed(6)}, Speed: ${speed} kts, Course: ${course}°`);
-              console.log('🔵 Filter Stats:', smoothed.stats);
               
               this.processRTKData();
             } else {
-              console.log('🔵 Rover GPS Fix (Filtered out):', 
-                `Raw: Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}, Speed: ${speed} kts`);
             }
           } else {
-            console.log('🔵 ❌ Invalid GPS coordinates:', `Lat: ${lat}, Lng: ${lng}`);
           }
         }
       }
@@ -282,16 +268,11 @@ class DualGPSReader extends EventEmitter {
                 course: course 
               };
               
-              console.log('🟡 Base GPS Fix (Filtered):', 
-                `Lat: ${smoothed.lat.toFixed(6)}, Lng: ${smoothed.lon.toFixed(6)}, Speed: ${speed} kts, Course: ${course}°`);
               
               this.processRTKData();
             } else {
-              console.log('🟡 Base GPS Fix (Filtered out):', 
-                `Raw: Lat: ${lat.toFixed(6)}, Lng: ${lng.toFixed(6)}, Speed: ${speed} kts`);
             }
           } else {
-            console.log('🟡 ❌ Invalid GPS coordinates:', `Lat: ${lat}, Lng: ${lng}`);
           }
         }
       }
@@ -342,7 +323,6 @@ class DualGPSReader extends EventEmitter {
         const roverToBaseHeading = this.calculateHeading(this.roverData, this.baseData);
         const baseline = this.calculateDistance(this.roverData, this.baseData);
         
-        console.log('🎯 RTK Data (Full):', `Rover-to-Base: ${roverToBaseHeading.toFixed(1)}°, Baseline: ${baseline.toFixed(2)}m, Rover Course: ${this.roverData.course.toFixed(1)}°`);
         
         const effectiveHeading = (this.roverData.course > 0 && this.roverData.course <= 360) ? 
                                 this.roverData.course : roverToBaseHeading;
@@ -355,7 +335,6 @@ class DualGPSReader extends EventEmitter {
         });
       } else {
         // Only rover has data - single GPS mode with rover data
-        console.log('🎯 RTK Data (Rover Only):', `Rover Course: ${this.roverData.course.toFixed(1)}°, Base: No fix`);
         
         const effectiveHeading = (this.roverData.course > 0 && this.roverData.course <= 360) ? 
                                 this.roverData.course : 0;
@@ -440,7 +419,6 @@ class DualGPSReader extends EventEmitter {
       }
 
       const baudRate = baudRates[currentIndex];
-      console.log(`🔵 Trying ${baudRate} baud...`);
 
       if (this.roverSerial && this.roverSerial.isOpen) {
         this.roverSerial.close();
@@ -460,13 +438,11 @@ class DualGPSReader extends EventEmitter {
 
       this.roverSerial.open((err) => {
         if (err) {
-          console.log(`🔵 Failed at ${baudRate} baud:`, err.message);
           currentIndex++;
           setTimeout(tryNextBaudRate, 1000);
           return;
         }
 
-        console.log(`🔵 Rover connected at ${baudRate} baud`);
         this.roverBaudRate = baudRate; // Update the rover baud rate
         this.emit('roverConnected', true);
         
@@ -497,7 +473,6 @@ class DualGPSReader extends EventEmitter {
               // If we get too much garbled data, try next baud rate
               this.garbledDataCount = (this.garbledDataCount || 0) + 1;
               if (this.garbledDataCount > 10) {
-                console.log('🔵 Trying next baud rate...');
                 this.garbledDataCount = 0;
                 currentIndex++;
                 setTimeout(tryNextBaudRate, 1000);
@@ -514,7 +489,6 @@ class DualGPSReader extends EventEmitter {
       });
 
       this.roverSerial.on('close', () => {
-        console.log('🔵 Rover GPS disconnected');
         this.isConnected = false;
         this.emit('disconnect');
       });

@@ -10,7 +10,9 @@ function makeSidebarGPS() {
 
   var trackingButton = document.createElement("button");
   trackingButton.id = "tracking-button";
-  if (isTracking) {
+  // Check global tracking state
+  const currentTrackingState = window.isTracking || false;
+  if (currentTrackingState) {
     trackingButton.innerHTML = "Stop Tracking";
     trackingButton.className = "btn btn-negative btn-large btn-sb";
   } else {
@@ -18,17 +20,26 @@ function makeSidebarGPS() {
     trackingButton.className = "btn btn-positive btn-large btn-sb";
   }
   trackingButton.addEventListener("click", function () {
-    isTracking = !isTracking;
-    if (isTracking) {
+    // Toggle global tracking state
+    window.isTracking = !window.isTracking;
+    isTracking = window.isTracking; // Update local variable
+    
+    if (window.isTracking) {
+      // Resume path creation when starting tracking
+      if (typeof window.resumePathCreation === 'function') {
+        window.resumePathCreation();
+      }
       this.innerHTML = "Stop Tracking";
       this.className = "btn btn-negative btn-large btn-sb";
+      // Start creating previous vessel boxes (light green)
       startLog = moment();
-      applog.info("Started tracking");
+      applog.info("Started tracking - will create previous vessel boxes");
       navlog.info("Started tracking");
     } else {
       this.innerHTML = "Start Tracking";
       this.className = "btn btn-positive btn-large btn-sb";
-      applog.info("Stopped tracking");
+      // Stop creating previous vessel boxes
+      applog.info("Stopped tracking - no new previous boxes");
       navlog.info("Stopped tracking");
     }
   });
@@ -40,22 +51,18 @@ function makeSidebarGPS() {
   setZoneButton.addEventListener("click", function () {
     if (settingZoneState == "init") {
       setZoneButton.innerHTML = "Cancel";
-      // Clear existing zone
-      if (map && map.getSource('zone')) {
-        map.getSource('zone').setData({
-          type: 'FeatureCollection',
-          features: []
-        });
+      // Clear existing zone (Google Maps version)
+      if (window.zone) {
+        window.zone.setMap(null);
+        window.zone = null;
       }
       settingZoneState = "setting";
     } else if (settingZoneState == "setting") {
       setZoneButton.innerHTML = "Select Zone";
-      // Clear existing zone
-      if (map && map.getSource('zone')) {
-        map.getSource('zone').setData({
-          type: 'FeatureCollection',
-          features: []
-        });
+      // Clear existing zone (Google Maps version)
+      if (window.zone) {
+        window.zone.setMap(null);
+        window.zone = null;
       }
       settingZoneState = "init";
     } else if (settingZoneState == "ready") {
@@ -82,10 +89,35 @@ function makeSidebarGPS() {
   clearButton.id = "clear-button";
   clearButton.innerHTML = "Clear Zones/Paths";
   clearButton.addEventListener("click", function () {
-    path.setPath([]);
-    path.setMap(null);
-    zone.setPath([]);
-    zone.setPath(null);
+    // ❌ Do NOT stop tracking - keep live boat updating
+    // window.isTracking = false;
+
+    // ✅ Suppress future trail boxes, but keep live boat updating
+    window.suppressPathCreation = true;
+
+    // ✅ Clear existing trail, keep the current boat
+    if (typeof window.clearVesselBoxes === 'function') {
+      window.clearVesselBoxes({ keepCurrent: true, keepPolyline: false });
+    }
+    
+    // Optional: clear zones/paths/markers like you already do
+    if (window.zone) { 
+      window.zone.setMap(null); 
+      window.zone = null; 
+    }
+    if (window.path) { 
+      window.path.setMap(null); 
+      window.path = null; 
+    }
+    if (typeof window.deleteMarkers === 'function') { 
+      window.deleteMarkers(); 
+    }
+    if (typeof window.disttabledata !== 'undefined') { 
+      window.disttabledata.length = 1; 
+    }
+    if (typeof window.updateDistTable === 'function') { 
+      window.updateDistTable(); 
+    }
   });
 
   var startPathButton = document.createElement("button");
