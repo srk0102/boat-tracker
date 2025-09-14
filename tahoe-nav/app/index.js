@@ -442,7 +442,7 @@ function createVesselBox(lat, lng, heading, type = 'current') {
   const halfWidth = boxWidth / 2;
   
   // Convert heading to radians
-  const headingRad = (heading * Math.PI) / 180;
+  const headingRad = ((heading + 90) * Math.PI) / 180;
   
   // Calculate offsets for each corner
   const corners = [

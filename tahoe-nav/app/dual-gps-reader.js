@@ -10,66 +10,66 @@ class DualGPSReader extends EventEmitter {
   constructor(roverPort, basePort, roverBaudRate = 19200, baseBaudRate = 115200) {
     super();
     this.roverPort = roverPort; // COM7 - Rover (position)
-    this.basePort = basePort;   // COM12 - Base (direction)
-    
+    this.basePort  = basePort;  // COM12 - Base (direction)
+
     this.roverBaudRate = roverBaudRate; // 19200 for rover
-    this.baseBaudRate = baseBaudRate;   // 115200 for base
-    this.roverProcess = null;
-    this.baseProcess = null;
-    this.roverData = null;
-    this.baseData = null;
+    this.baseBaudRate  = baseBaudRate;  // 115200 for base
+
+    this.roverSerial = null;
+    this.baseSerial  = null;
+    this.roverParser = null;
+    this.baseParser  = null;
+
+    this.roverData = null; // {lat,lng,speed,course}
+    this.baseData  = null; // {lat,lng,speed,course}
     this.isConnected = false;
-    
-    // Initialize GPS smoothing filters - OPTIMIZED FOR SPEED
+
+    // Smoothing filters
     this.roverFilter = new PoseFilter({
-      preferRTK: false,     // Set to true when RTK corrections are flowing
-      maxHAccM: 3.0,        // 3m accuracy (relaxed for faster updates)
-      deadbandM: 0.1,       // 10cm deadband (much more responsive)
-      minSats: 4,           // Minimum satellites (reduced for faster updates)
-      emaAlpha: 0.6,        // More responsive smoothing
-      require3D: false      // Don't require 3D fix
+      preferRTK: false,
+      maxHAccM: 3.0,
+      deadbandM: 0.1,
+      minSats: 4,
+      emaAlpha: 0.6,
+      require3D: false
     });
-    
+
     this.baseFilter = new PoseFilter({
       preferRTK: false,
-      maxHAccM: 4.0,        // Base can be less accurate (relaxed)
-      deadbandM: 0.2,       // 20cm deadband for base (more responsive)
-      minSats: 4,           // Base needs fewer satellites (reduced)
-      emaAlpha: 0.5,        // More responsive
-      require3D: false      // Don't require 3D fix
+      maxHAccM: 4.0,
+      deadbandM: 0.2,
+      minSats: 4,
+      emaAlpha: 0.5,
+      require3D: false
     });
   }
 
   connect() {
-    
     this.connectRover();
     this.connectBase();
-    
-    // Add timeout to check if we're getting data
+
     setTimeout(() => {
       if (!this.roverData) {
+        console.warn('🔵 Rover: no data within 10s');
       }
       if (!this.baseData) {
+        console.warn('🟡 Base: no data within 10s');
       }
     }, 10000);
   }
 
+  // ---------- serial wiring ----------
   connectRover() {
     try {
       this.roverSerial = new SerialPort({
         path: this.roverPort,
         baudRate: this.roverBaudRate,
         autoOpen: false,
-        dataBits: 8,
-        parity: 'none',
-        stopBits: 1,
-        flowControl: false
+        dataBits: 8, parity: 'none', stopBits: 1, flowControl: false
       });
-
-      // Create a readline parser for the rover
       this.roverParser = this.roverSerial.pipe(new ReadlineParser({ delimiter: '\r\n' }));
 
-      this.roverSerial.open((err) => {
+      this.roverSerial.open(err => {
         if (err) {
           console.error('🔵 Rover GPS Error:', err.message);
           this.tryAlternativeBaudRates();
@@ -78,46 +78,34 @@ class DualGPSReader extends EventEmitter {
         this.emit('roverConnected', true);
       });
 
-      // Listen for parsed lines from rover
       this.roverParser.on('data', (line) => {
-        if (line.trim()) {
-          // Check if line contains valid NMEA data
-          if (this.isValidNMEA(line.trim())) {
-            if (line.includes('RMC') || line.includes('GGA')) {
-              this.parseRoverNMEA(line.trim());
-            }
-          } else if (this.isUbloxBinaryData(line)) {
-            // Try alternative baud rates if we're getting binary data
-            this.tryAlternativeBaudRates();
-          } else if (this.hasValidNMEAData(line)) {
-            // Extract NMEA sentences from mixed data
-            const nmeaMatches = line.match(/\$[A-Z]{2}[A-Z]{3},[^*]*\*[0-9A-F]{2}/g);
-            if (nmeaMatches) {
-              nmeaMatches.forEach(nmea => {
-                if (nmea.includes('RMC') || nmea.includes('GGA')) {
-                  this.parseRoverNMEA(nmea);
-                }
-              });
-            }
-          } else {
-            // If we get garbled data, try alternative baud rates
-            this.tryAlternativeBaudRates();
-          }
+        const s = (line || '').trim();
+        if (!s) return;
+
+        if (!this.isValidNMEA(s)) {
+          if (this.isUbloxBinaryData(s)) this.tryAlternativeBaudRates();
+          return;
+        }
+
+        const talker = s.slice(0,6); // $GPRMC / $GPGGA / $GNRMC / $GNGGA
+        if (talker.endsWith('RMC')) {
+          this.parseRMC(s, 'rover');
+        } else if (talker.endsWith('GGA')) {
+          this.parseGGA(s, 'rover');
         }
       });
 
-      this.roverSerial.on('error', (err) => {
+      this.roverSerial.on('error', err => {
         console.error('🔵 Rover GPS Error:', err.message);
         this.emit('roverConnected', false);
       });
-
       this.roverSerial.on('close', () => {
         this.isConnected = false;
         this.emit('disconnect');
       });
 
-    } catch (error) {
-      console.error('🔵 Failed to create Rover GPS connection:', error);
+    } catch (e) {
+      console.error('🔵 Failed to create Rover GPS connection:', e);
       this.emit('roverConnected', false);
     }
   }
@@ -128,16 +116,11 @@ class DualGPSReader extends EventEmitter {
         path: this.basePort,
         baudRate: this.baseBaudRate,
         autoOpen: false,
-        dataBits: 8,
-        parity: 'none',
-        stopBits: 1,
-        flowControl: false
+        dataBits: 8, parity: 'none', stopBits: 1, flowControl: false
       });
-
-      // Create a readline parser for the base
       this.baseParser = this.baseSerial.pipe(new ReadlineParser({ delimiter: '\r\n' }));
 
-      this.baseSerial.open((err) => {
+      this.baseSerial.open(err => {
         if (err) {
           console.error('🟡 Base GPS Error:', err.message);
           this.emit('baseConnected', false);
@@ -146,279 +129,228 @@ class DualGPSReader extends EventEmitter {
         this.emit('baseConnected', true);
       });
 
-      // Listen for parsed lines from base
       this.baseParser.on('data', (line) => {
-        if (line.trim()) {
-          if (this.isValidNMEA(line.trim())) {
-            if (line.includes('RMC') || line.includes('GGA')) {
-              this.parseBaseNMEA(line.trim());
-            }
-          }
+        const s = (line || '').trim();
+        if (!s) return;
+        if (!this.isValidNMEA(s)) return;
+
+        const talker = s.slice(0,6);
+        if (talker.endsWith('RMC')) {
+          this.parseRMC(s, 'base');
+        } else if (talker.endsWith('GGA')) {
+          this.parseGGA(s, 'base');
         }
       });
 
-      this.baseSerial.on('error', (err) => {
+      this.baseSerial.on('error', err => {
         console.error('🟡 Base GPS Error:', err.message);
         this.emit('baseConnected', false);
       });
 
-      this.baseSerial.on('close', () => {
-      });
-
-    } catch (error) {
-      console.error('🟡 Failed to create Base GPS connection:', error);
+    } catch (e) {
+      console.error('🟡 Failed to create Base GPS connection:', e);
       this.emit('baseConnected', false);
     }
   }
 
-  parseRoverNMEA(nmea) {
+  // ---------- NMEA parsing ----------
+  parseRMC(nmea, which) {
     try {
-      const parts = nmea.split(',');
-      
-      if (parts[0] === '$GNRMC' || parts[0] === '$GPRMC') {
-        if (parts[2] === 'A') { // Valid fix
-          const lat = this.parseCoordinate(parts[3], parts[4]);
-          const lng = this.parseCoordinate(parts[5], parts[6]);
-          const speed = parseFloat(parts[7]) || 0;
-          const course = parseFloat(parts[8]) || 0;
+      const p = nmea.split(',');
+      if (p.length < 12) return;
+      if (p[2] !== 'A') return; // valid
 
-          // Validate coordinates
-          if (this.isValidCoordinate(lat, lng)) {
-            // Create quality object for filtering
-            const quality = {
-              fixType: 3, // 3D fix (assume RMC with 'A' status is 3D)
-              numSV: 12,  // Assume good satellite count for RMC
-              hdop: 1.0   // Assume good HDOP for RMC with 'A' status
-            };
+      const lat   = this.parseCoordinate(p[3], p[4]);
+      const lng   = this.parseCoordinate(p[5], p[6]);
+      const speed = parseFloat(p[7]) || 0;   // knots
+      const course= parseFloat(p[8]) || 0;   // degrees
 
-            // Create fix object for filter
-            const fix = {
-              lat: lat,
-              lon: lng,
-              speedMps: speed * 0.514444, // Convert knots to m/s
-              quality: quality,
-              timestampMs: Date.now()
-            };
+      if (!this.isValidCoordinate(lat, lng)) return;
 
-            // Apply smoothing filter
-            const smoothed = this.roverFilter.update(fix);
-            
-            if (smoothed) {
-              // Use smoothed coordinates
-              this.roverData = { 
-                lat: smoothed.lat, 
-                lng: smoothed.lon, 
-                speed: speed, 
-                course: course 
-              };
-              
-              
-              this.processRTKData();
-            } else {
-            }
-          } else {
-          }
-        }
-      }
-      // Emit rover connection status
-      this.emit('roverConnected', true);
-    } catch (error) {
-      console.warn('🔵 Error parsing rover NMEA:', error);
+      const fix = {
+        lat, lon: lng,
+        speedMps: speed * 0.514444,
+        quality: { fixType: 3, numSV: 12, hdop: 1.0 },
+        timestampMs: Date.now()
+      };
+      const filt = (which === 'rover' ? this.roverFilter : this.baseFilter).update(fix);
+      if (!filt) return;
+
+      const obj = { lat: filt.lat, lng: filt.lon, speed, course };
+      if (which === 'rover') this.roverData = obj; else this.baseData = obj;
+
+      this.processRTKData();
+    } catch (e) {
+      console.warn(`❗ Error parsing ${which} RMC:`, e);
     }
   }
 
-  parseBaseNMEA(nmea) {
+  // GGA has position & fix quality, no speed/course
+  parseGGA(nmea, which) {
     try {
-      const parts = nmea.split(',');
-      
-      if (parts[0] === '$GNRMC' || parts[0] === '$GPRMC') {
-        if (parts[2] === 'A') { // Valid fix
-          const lat = this.parseCoordinate(parts[3], parts[4]);
-          const lng = this.parseCoordinate(parts[5], parts[6]);
-          const speed = parseFloat(parts[7]) || 0;
-          const course = parseFloat(parts[8]) || 0;
+      const p = nmea.split(',');
+      if (p.length < 10) return;
 
-          // Validate coordinates
-          if (this.isValidCoordinate(lat, lng)) {
-            // Create quality object for filtering
-            const quality = {
-              fixType: 3, // 3D fix (assume RMC with 'A' status is 3D)
-              numSV: 10,  // Assume good satellite count for base
-              hdop: 1.2   // Assume good HDOP for base
-            };
+      const fixQ = parseInt(p[6],10) || 0; // 0=no fix
+      if (fixQ === 0) return;
 
-            // Create fix object for filter
-            const fix = {
-              lat: lat,
-              lon: lng,
-              speedMps: speed * 0.514444, // Convert knots to m/s
-              quality: quality,
-              timestampMs: Date.now()
-            };
+      const lat   = this.parseCoordinate(p[2], p[3]);
+      const lng   = this.parseCoordinate(p[4], p[5]);
+      const numSV = parseInt(p[7],10) || 0;
+      const hdop  = parseFloat(p[8]) || 99;
 
-            // Apply smoothing filter
-            const smoothed = this.baseFilter.update(fix);
-            
-            if (smoothed) {
-              // Use smoothed coordinates
-              this.baseData = { 
-                lat: smoothed.lat, 
-                lng: smoothed.lon, 
-                speed: speed, 
-                course: course 
-              };
-              
-              
-              this.processRTKData();
-            } else {
-            }
-          } else {
-          }
-        }
-      }
-      // Emit base connection status
-      this.emit('baseConnected', true);
-    } catch (error) {
-      console.warn('🟡 Error parsing base NMEA:', error);
+      if (!this.isValidCoordinate(lat, lng)) return;
+
+      const fix = {
+        lat, lon: lng,
+        speedMps: 0,
+        quality: { fixType: fixQ >= 4 ? 4 : 3, numSV, hdop },
+        timestampMs: Date.now()
+      };
+      const filt = (which === 'rover' ? this.roverFilter : this.baseFilter).update(fix);
+      if (!filt) return;
+
+      const obj = { lat: filt.lat, lng: filt.lon, speed: 0, course: 0 };
+      if (which === 'rover') this.roverData = obj; else this.baseData = obj;
+
+      this.processRTKData();
+    } catch (e) {
+      console.warn(`❗ Error parsing ${which} GGA:`, e);
     }
   }
 
   parseCoordinate(coord, direction) {
-    if (!coord || coord === '') return 0;
-    
-    // NMEA format: DDMM.MMMM for lat, DDDMM.MMMM for lng
-    // Example: "3724.0010" = 37 degrees, 24.0010 minutes
-    const dotIndex = coord.indexOf('.');
-    if (dotIndex === -1) return 0;
-    
-    // For latitude: first 2 digits are degrees, rest are minutes
-    // For longitude: first 3 digits are degrees, rest are minutes
-    const isLongitude = direction === 'W' || direction === 'E';
-    const degreesLength = isLongitude ? 3 : 2;
-    
-    const degrees = parseFloat(coord.substring(0, degreesLength));
-    const minutes = parseFloat(coord.substring(degreesLength));
-    
-    const decimal = degrees + (minutes / 60);
-    
-    if (direction === 'S' || direction === 'W') {
-      return -decimal;
-    }
-    return decimal;
+    if (!coord) return 0;
+    const dot = coord.indexOf('.');
+    if (dot === -1) return 0;
+
+    const isLon = (direction === 'E' || direction === 'W');
+    const degLen = isLon ? 3 : 2;
+
+    const deg = parseFloat(coord.substring(0, degLen));
+    const min = parseFloat(coord.substring(degLen));
+    if (Number.isNaN(deg) || Number.isNaN(min)) return 0;
+
+    let dec = deg + (min / 60);
+    if (direction === 'S' || direction === 'W') dec = -dec;
+    return dec;
   }
 
   isValidCoordinate(lat, lng) {
-    // Check if coordinates are valid numbers and within valid ranges
-    return !isNaN(lat) && !isNaN(lng) && 
-           lat >= -90 && lat <= 90 && 
-           lng >= -180 && lng <= 180 &&
-           lat !== 0 && lng !== 0; // Exclude 0,0 which is often invalid
+    return Number.isFinite(lat) && Number.isFinite(lng) &&
+           lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 &&
+           !(lat === 0 && lng === 0);
   }
 
+  // ---------- fusion & yaw ----------
   processRTKData() {
-    // Work with rover data even if base doesn't have a fix
-    if (this.roverData) {
-      if (this.baseData) {
-        // Both rover and base have data - full RTK mode
-        const roverToBaseHeading = this.calculateHeading(this.roverData, this.baseData);
-        const baseline = this.calculateDistance(this.roverData, this.baseData);
-        
-        
-        const effectiveHeading = (this.roverData.course > 0 && this.roverData.course <= 360) ? 
-                                this.roverData.course : roverToBaseHeading;
-        
-        this.emit('rtkData', {
-          rover: this.roverData,
-          base: this.baseData,
-          heading: effectiveHeading,
-          baseline: baseline
-        });
-      } else {
-        // Only rover has data - single GPS mode with rover data
-        
-        const effectiveHeading = (this.roverData.course > 0 && this.roverData.course <= 360) ? 
-                                this.roverData.course : 0;
-        
-        this.emit('rtkData', {
-          rover: this.roverData,
-          base: null,  // No base data
-          heading: effectiveHeading,
-          baseline: 0
-        });
-      }
+    if (!this.roverData) return;
 
-      // Always emit regular data for rover position
-      this.emit('data', this.roverData);
-      
-      if (!this.isConnected) {
-        this.isConnected = true;
-        this.emit('connected');
+    // Always emit rover position
+    this.emit('data', this.roverData);
+
+    let heading = 0;
+    let hasRTKHeading = false;
+    let baseline = 0;
+
+    if (this.baseData) {
+      // meters between antennas
+      baseline = this.calculateDistance(this.baseData, this.roverData);
+      const MIN_BASELINE_M = 0.8; // (use 0.4 just for driveway tests)
+
+      if (baseline >= MIN_BASELINE_M) {
+        // TRUE yaw: BASE -> ROVER
+        heading = this.calculateBearing(this.baseData, this.roverData);
+        hasRTKHeading = true;
       }
+    }
+
+    if (!hasRTKHeading) {
+      const c = this.roverData.course;
+      heading = (c > 0 && c <= 360) ? c : 0;
+    }
+
+    // Debug
+    try {
+      console.log('[RTK]', {
+        baseline_m: +baseline.toFixed(2),
+        heading_deg: +heading.toFixed(1),
+        hasRTKHeading
+      });
+    } catch (_){}
+
+    this.emit('rtkData', {
+      rover: this.roverData,
+      base:  this.baseData || null,
+      heading,
+      baseline,
+      hasRTKHeading
+    });
+
+    if (!this.isConnected) {
+      this.isConnected = true;
+      this.emit('connected');
     }
   }
 
-  calculateHeading(rover, base) {
-    const dLng = (base.lng - rover.lng) * Math.PI / 180;
-    const lat1 = rover.lat * Math.PI / 180;
-    const lat2 = base.lat * Math.PI / 180;
-    
-    const y = Math.sin(dLng) * Math.cos(lat2);
-    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
-    
-    let heading = Math.atan2(y, x) * 180 / Math.PI;
-    return (heading + 360) % 360;
+  // Bearing from 'from' -> 'to' (0°=North, clockwise)
+  calculateBearing(from, to) {
+    const φ1 = from.lat * Math.PI / 180;
+    const φ2 =   to.lat * Math.PI / 180;
+    const Δλ = (to.lng - from.lng) * Math.PI / 180;
+
+    const y = Math.sin(Δλ) * Math.cos(φ2);
+    const x = Math.cos(φ1) * Math.sin(φ2) -
+              Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+
+    let brng = Math.atan2(y, x) * 180 / Math.PI;
+    return (brng + 360) % 360;
   }
 
-  calculateDistance(point1, point2) {
-    const R = 6371000; // Earth's radius in meters
-    const dLat = (point2.lat - point1.lat) * Math.PI / 180;
-    const dLng = (point2.lng - point1.lng) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-              Math.cos(point1.lat * Math.PI / 180) * Math.cos(point2.lat * Math.PI / 180) *
-              Math.sin(dLng/2) * Math.sin(dLng/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
+  calculateDistance(a, b) {
+    const R = 6371000;
+    const φ1 = a.lat * Math.PI/180;
+    const φ2 = b.lat * Math.PI/180;
+    const Δφ = (b.lat - a.lat) * Math.PI/180;
+    const Δλ = (b.lng - a.lng) * Math.PI/180;
+
+    const sin = Math.sin;
+    const cos = Math.cos;
+
+    const h = sin(Δφ/2)**2 + cos(φ1)*cos(φ2)*sin(Δλ/2)**2;
+    return 2 * R * Math.atan2(Math.sqrt(h), Math.sqrt(1-h));
   }
 
+  // ---------- helpers ----------
   isValidNMEA(line) {
-    // Check if line looks like valid NMEA data
-    if (typeof line !== 'string') return false;
-    return line.startsWith('$') && line.includes('*') && line.length > 10;
+    return typeof line === 'string' && line.startsWith('$') && line.includes('*') && line.length > 10;
   }
 
   isUbloxBinaryData(data) {
-    // Ublox binary messages start with 0xB5 0x62 (sync chars)
-    if (Buffer.isBuffer(data)) {
-      return data[0] === 0xB5 && data[1] === 0x62;
-    }
-    if (typeof data === 'string') {
-      const buffer = Buffer.from(data, 'binary');
-      return buffer[0] === 0xB5 && buffer[1] === 0x62;
+    if (Buffer.isBuffer(data)) return data[0] === 0xB5 && data[1] === 0x62;
+    if (typeof data === 'string' && data.length >= 2) {
+      const buf = Buffer.from(data, 'binary');
+      return buf[0] === 0xB5 && buf[1] === 0x62;
     }
     return false;
   }
 
-  hasValidNMEAData(data) {
-    // Check if data contains valid NMEA sentences
-    if (typeof data === 'string') {
-      return data.includes('$G') && data.includes('*');
-    }
-    return false;
+  hasValidNMEAData(s) {
+    return typeof s === 'string' && s.includes('$G') && s.includes('*');
   }
 
   tryAlternativeBaudRates() {
-    // Ublox GPS modules commonly use these baud rates
     const baudRates = [9600, 19200, 38400, 57600, 115200, 230400, 460800];
-    let currentIndex = 0;
+    let idx = 0;
 
-    const tryNextBaudRate = () => {
-      if (currentIndex >= baudRates.length) {
+    const tryNext = () => {
+      if (idx >= baudRates.length) {
         console.error('🔵 Failed to connect to rover at any baud rate');
         this.emit('roverConnected', false);
         return;
       }
 
-      const baudRate = baudRates[currentIndex];
+      const rate = baudRates[idx++];
 
       if (this.roverSerial && this.roverSerial.isOpen) {
         this.roverSerial.close();
@@ -426,105 +358,55 @@ class DualGPSReader extends EventEmitter {
 
       this.roverSerial = new SerialPort({
         path: this.roverPort,
-        baudRate: baudRate,
+        baudRate: rate,
         autoOpen: false,
-        dataBits: 8,
-        parity: 'none',
-        stopBits: 1,
-        flowControl: false
+        dataBits: 8, parity: 'none', stopBits: 1, flowControl: false
       });
-
       this.roverParser = this.roverSerial.pipe(new ReadlineParser({ delimiter: '\r\n' }));
 
-      this.roverSerial.open((err) => {
+      this.roverSerial.open(err => {
         if (err) {
-          currentIndex++;
-          setTimeout(tryNextBaudRate, 1000);
+          setTimeout(tryNext, 1000);
           return;
         }
 
-        this.roverBaudRate = baudRate; // Update the rover baud rate
+        this.roverBaudRate = rate;
         this.emit('roverConnected', true);
-        
-        // Configure Ublox to output NMEA data
         this.configureUbloxForNMEA();
 
-        // Set up the same data handler
         this.roverParser.on('data', (line) => {
-          if (line.trim()) {
-            if (this.isValidNMEA(line.trim())) {
-              if (line.includes('RMC') || line.includes('GGA')) {
-                this.parseRoverNMEA(line.trim());
-              }
-            } else if (this.isUbloxBinaryData(line)) {
-              // This baud rate might be correct but sending binary data
-              // We'll keep this connection and wait for NMEA data
-            } else if (this.hasValidNMEAData(line)) {
-              // Extract NMEA sentences from mixed data
-              const nmeaMatches = line.match(/\$[A-Z]{2}[A-Z]{3},[^*]*\*[0-9A-F]{2}/g);
-              if (nmeaMatches) {
-                nmeaMatches.forEach(nmea => {
-                  if (nmea.includes('RMC') || nmea.includes('GGA')) {
-                    this.parseRoverNMEA(nmea);
-                  }
-                });
-              }
-            } else {
-              // If we get too much garbled data, try next baud rate
-              this.garbledDataCount = (this.garbledDataCount || 0) + 1;
-              if (this.garbledDataCount > 10) {
-                this.garbledDataCount = 0;
-                currentIndex++;
-                setTimeout(tryNextBaudRate, 1000);
-                return;
-              }
-            }
-          }
+          const s = (line || '').trim();
+          if (!s) return;
+          if (!this.isValidNMEA(s)) return;
+
+          const talker = s.slice(0,6);
+          if (talker.endsWith('RMC')) this.parseRMC(s, 'rover');
+          else if (talker.endsWith('GGA')) this.parseGGA(s, 'rover');
         });
       });
 
-      this.roverSerial.on('error', (err) => {
+      this.roverSerial.on('error', err => {
         console.error('🔵 Rover GPS Error:', err.message);
         this.emit('roverConnected', false);
       });
-
       this.roverSerial.on('close', () => {
         this.isConnected = false;
         this.emit('disconnect');
       });
     };
 
-    tryNextBaudRate();
+    tryNext();
   }
 
   configureUbloxForNMEA() {
-    // Ublox UBX commands to enable NMEA output
-    // This is a simplified approach - in production you might want to use ublox library
-    setTimeout(() => {
-      if (this.roverSerial && this.roverSerial.isOpen) {
-        // Note: In a real implementation, you would send proper UBX binary commands
-        // For now, we'll rely on the GPS already being configured for NMEA output
-      }
-    }, 2000);
+    // Placeholder for UBX config if needed.
   }
 
   disconnect() {
-    if (this.roverParser) {
-      this.roverParser.destroy();
-      this.roverParser = null;
-    }
-    if (this.roverSerial && this.roverSerial.isOpen) {
-      this.roverSerial.close();
-      this.roverSerial = null;
-    }
-    if (this.baseParser) {
-      this.baseParser.destroy();
-      this.baseParser = null;
-    }
-    if (this.baseSerial && this.baseSerial.isOpen) {
-      this.baseSerial.close();
-      this.baseSerial = null;
-    }
+    try { this.roverParser?.destroy(); } catch(_){}
+    try { this.roverSerial?.isOpen && this.roverSerial.close(); } catch(_){}
+    try { this.baseParser?.destroy(); } catch(_){}
+    try { this.baseSerial?.isOpen  && this.baseSerial.close(); } catch(_){}
     this.isConnected = false;
     this.emit('disconnect');
   }
