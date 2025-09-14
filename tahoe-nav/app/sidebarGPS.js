@@ -40,25 +40,23 @@ function makeSidebarGPS() {
   setZoneButton.addEventListener("click", function () {
     if (settingZoneState == "init") {
       setZoneButton.innerHTML = "Cancel";
-      zone.setMap(null);
-      zone = new google.maps.Polyline({
-        map: map,
-        path: [],
-        strokeColor: "#FF0000",
-        strokeOpacity: 1.0,
-        strokeWeight: 2,
-      });
+      // Clear existing zone
+      if (map && map.getSource('zone')) {
+        map.getSource('zone').setData({
+          type: 'FeatureCollection',
+          features: []
+        });
+      }
       settingZoneState = "setting";
     } else if (settingZoneState == "setting") {
       setZoneButton.innerHTML = "Select Zone";
-      zone.setMap(null);
-      zone = new google.maps.Polyline({
-        map: map,
-        path: [],
-        strokeColor: "#FF0000",
-        strokeOpacity: 1.0,
-        strokeWeight: 2,
-      });
+      // Clear existing zone
+      if (map && map.getSource('zone')) {
+        map.getSource('zone').setData({
+          type: 'FeatureCollection',
+          features: []
+        });
+      }
       settingZoneState = "init";
     } else if (settingZoneState == "ready") {
       generatePath();

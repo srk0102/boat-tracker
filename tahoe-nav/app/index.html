@@ -2,11 +2,11 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <!-- https://electronjs.org/docs/tutorial/security#csp-meta-tag -->
     <link rel="stylesheet" href="styles.css" />
+    <link href='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css' rel='stylesheet' />
     <meta
       http-equiv="Content-Security-Policy"
-      content="script-src 'self' https://maps.googleapis.com https://maps.gstatic.com 'unsafe-inline';"
+      content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https:; worker-src 'self' blob:;"
     />
     <title>Vessel Propulsion System</title>
   </head>
@@ -36,6 +36,9 @@
     <footer class="toolbar toolbar-footer">
       <div id="board-status" class="footer-left">
         Board not detected: Check connection with board
+      </div>
+      <div id="gps-info" class="footer-center">
+        GPS: Connecting...
       </div>
       <div id="tracking-status" class="footer-right">
       </div>

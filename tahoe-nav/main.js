@@ -7,6 +7,9 @@ function createWindow() {
     height: 900,
     webPreferences: {
       nodeIntegration: true,
+      contextIsolation: false,
+      webSecurity: false, // Disable for development to allow Mapbox workers
+      allowRunningInsecureContent: true,
     },
   });
 

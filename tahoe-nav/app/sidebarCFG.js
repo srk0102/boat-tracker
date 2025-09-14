@@ -27,14 +27,24 @@ function makeSidebarCFG() {
         })
         console.log(coords)
         if (coords.length > 0) {
-          var path = new google.maps.Polyline({
-            path: coords,
-            geodesic: true,
-            strokeColor: '#FFFFFF',
-            strokeOpacity: 1.0,
-            strokeWeight: 3
-          });
-          path.setMap(map);
+          // Convert coordinates to Mapbox format [lng, lat]
+          const pathCoordinates = coords.map(coord => [coord.lng, coord.lat]);
+          
+          // Update the path source with imported coordinates
+          if (map && map.getSource('path')) {
+            const pathData = {
+              type: 'FeatureCollection',
+              features: [{
+                type: 'Feature',
+                geometry: {
+                  type: 'LineString',
+                  coordinates: pathCoordinates
+                }
+              }]
+            };
+            map.getSource('path').setData(pathData);
+            console.log('Path imported with', pathCoordinates.length, 'points');
+          }
         } else {
           console.log("Error: coords holds no coordinates")
         }
@@ -83,16 +93,35 @@ function makeSidebarCFG() {
 
 // Adds a reference marker to the map.
 function addMarker(position) {
-  const marker = new google.maps.Marker({
-    position,
-    icon: "./assets/pin11green.png",
-    label: {
-      text: `R`,
-      fontSize:"10px",
-    },
-    map,
-  });
+  // Create custom marker element with green pin and "R" label
+  const markerElement = document.createElement('div');
+  markerElement.className = 'reference-marker';
+  markerElement.innerHTML = `
+    <div style="
+      background-image: url('./assets/pin11green.png');
+      background-size: contain;
+      background-repeat: no-repeat;
+      width: 30px;
+      height: 40px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+      font-size: 10px;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+    ">
+      R
+    </div>
+  `;
 
+  const marker = new mapboxgl.Marker({
+    element: markerElement,
+    anchor: 'bottom'
+  })
+  .setLngLat([position.lng, position.lat])
+  .addTo(map);
 }
 
 module.exports = { makeSidebarCFG };

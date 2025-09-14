@@ -8,16 +8,18 @@
     "rebuild": "electron-rebuild -f -w serialport"
   },
   "devDependencies": {
-    "electron": "^8.2.3",
+    "electron": "^8.5.5",
     "electron-rebuild": "^3.2.7"
   },
   "dependencies": {
+    "@serialport/parser-readline": "^13.0.0",
     "convert-units": "^2.3.4",
     "electron-log": "^4.4.4",
     "gps": "^0.6.0",
     "haversine": "^1.1.1",
     "johnny-five": "^1.4.0",
     "moment": "^2.24.0",
-    "serialport": "^9.2.8"
+    "nmea-simple": "^3.3.0",
+    "serialport": "^10.5.0"
   }
 }

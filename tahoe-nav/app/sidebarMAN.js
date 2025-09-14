@@ -41,8 +41,13 @@ function makeSidebarMAN() {
   var hr = document.createElement("hr");
 
   // Set current pos for gps distance table
-  disttabledata[0][1] = pos.lat;
-  disttabledata[0][2] = pos.lng;
+  if (pos && pos.lat && pos.lng) {
+    disttabledata[0][1] = pos.lat;
+    disttabledata[0][2] = pos.lng;
+  } else {
+    disttabledata[0][1] = 0;
+    disttabledata[0][2] = 0;
+  }
   var coordtable = makeDistTable();
   var coordtableContainer = document.createElement("div");
   coordtableContainer.id = "coord-table-container";
@@ -57,12 +62,16 @@ function makeSidebarMAN() {
   addPointButton.id = "add-point-button";
   addPointButton.innerHTML = "Add Point";
   addPointButton.addEventListener("click", function () {
-    var len = disttabledata.length;
-    disttabledata.push(["Point " + len, pos.lat, pos.lng, "-", "-", "-"]);
-    var position = { lat: pos.lat, lng: pos.lng };
-    addMarker(position);
-    updateDistTable();
-    navlog.info(`Ref Pt Marked: { lat: ${pos.lat}, lng: ${pos.lng} }`);
+    if (pos && pos.lat && pos.lng) {
+      var len = disttabledata.length;
+      disttabledata.push(["Point " + len, pos.lat, pos.lng, "-", "-", "-"]);
+      var position = { lat: pos.lat, lng: pos.lng };
+      addMarker(position);
+      updateDistTable();
+      navlog.info(`Ref Pt Marked: { lat: ${pos.lat}, lng: ${pos.lng} }`);
+    } else {
+      alert("No GPS position available. Please wait for GPS fix.");
+    }
   });
   var clearPointsButton = document.createElement("button");
   clearPointsButton.className = "btn btn-default btn-large";
@@ -115,8 +124,10 @@ function makeDistTable() {
 }
 
 function updateDistData() {
-  disttabledata[0][1] = pos.lat;
-  disttabledata[0][2] = pos.lng;
+  if (pos && pos.lat && pos.lng) {
+    disttabledata[0][1] = pos.lat;
+    disttabledata[0][2] = pos.lng;
+  }
 
   // If points are saved, calculate distance to points
   if (disttabledata.length > 1) {
@@ -178,31 +189,62 @@ function updateDistTable() {
 
 // Adds a marker to the map and push to the array.
 function addMarker(position) {
-  const marker = new google.maps.Marker({
-    position,
-    icon: "./assets/pin11.png",
-    label: `${markers.length + 1}`,
-    map,
-  });
+  // Create custom marker element with label
+  const markerElement = document.createElement('div');
+  markerElement.className = 'reference-marker';
+  markerElement.innerHTML = `
+    <div style="
+      background-image: url('./assets/pin11.png');
+      background-size: contain;
+      background-repeat: no-repeat;
+      width: 30px;
+      height: 40px;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+      font-size: 12px;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+    ">
+      ${markers.length + 1}
+    </div>
+  `;
+
+  const marker = new mapboxgl.Marker({
+    element: markerElement,
+    anchor: 'bottom'
+  })
+  .setLngLat([position.lng, position.lat])
+  .addTo(map);
 
   markers.push(marker);
 }
 
 // Sets the map on all markers in the array.
-function setMapOnAll(map) {
+function setMapOnAll(mapInstance) {
   for (let i = 0; i < markers.length; i++) {
-    markers[i].setMap(map);
+    if (mapInstance) {
+      markers[i].addTo(mapInstance);
+    } else {
+      markers[i].remove();
+    }
   }
 }
 
 // Removes the markers from the map, but keeps them in the array.
 function hideMarkers() {
-  setMapOnAll(null);
+  for (let i = 0; i < markers.length; i++) {
+    markers[i].remove();
+  }
 }
 
 // Shows any markers currently in the array.
 function showMarkers() {
-  setMapOnAll(map);
+  for (let i = 0; i < markers.length; i++) {
+    markers[i].addTo(map);
+  }
 }
 
 // Deletes all markers in the array by removing references to them.
