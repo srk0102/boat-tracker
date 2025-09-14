@@ -2,17 +2,17 @@
 // Professional-grade filtering to eliminate GPS jitter and drift
 const haversine = require('haversine');
 
-// Configurable thresholds for different scenarios
+// Configurable thresholds for different scenarios - OPTIMIZED FOR SPEED
 const CFG = {
-  minSats: 10,          // for NMEA/GGA - minimum satellites
-  maxHdop: 1.8,         // for NMEA/HDOP - maximum horizontal dilution of precision
-  maxHAccM: 1.5,        // for UBX hAcc (meters) - maximum horizontal accuracy
-  require3D: true,      // fixType >= 3 - require 3D fix
+  minSats: 6,           // for NMEA/GGA - minimum satellites (reduced for faster updates)
+  maxHdop: 2.5,         // for NMEA/HDOP - maximum horizontal dilution of precision (relaxed)
+  maxHAccM: 3.0,        // for UBX hAcc (meters) - maximum horizontal accuracy (relaxed)
+  require3D: false,     // fixType >= 3 - don't require 3D fix (faster updates)
   preferRTK: false,     // set true if you want FLOAT/FIX only
-  deadbandM: 0.5,       // don't move marker unless > deadband
-  emaAlpha: 0.25,       // EMA smoothing factor
-  windowSize: 7,        // median window size
-  minSpeedMps: 0.05,    // ignore jitter speeds below this
+  deadbandM: 0.1,       // don't move marker unless > deadband (reduced from 0.5m to 0.1m)
+  emaAlpha: 0.5,        // EMA smoothing factor (increased for faster response)
+  windowSize: 3,        // median window size (reduced for faster processing)
+  minSpeedMps: 0.01,    // ignore jitter speeds below this (reduced threshold)
 };
 
 class PoseFilter {

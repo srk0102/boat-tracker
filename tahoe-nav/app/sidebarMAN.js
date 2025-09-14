@@ -189,35 +189,33 @@ function updateDistTable() {
 
 // Adds a marker to the map and push to the array.
 function addMarker(position) {
-  // Create custom marker element with label
+  // Create custom marker element
   const markerElement = document.createElement('div');
-  markerElement.className = 'reference-marker';
-  markerElement.innerHTML = `
-    <div style="
-      background-image: url('./assets/pin11.png');
-      background-size: contain;
-      background-repeat: no-repeat;
-      width: 30px;
-      height: 40px;
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-weight: bold;
-      font-size: 12px;
-      text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
-    ">
-      ${markers.length + 1}
-    </div>
+  markerElement.style.cssText = `
+    background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+    border: 2px solid white;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    width: 30px;
+    height: 40px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 12px;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
   `;
+  markerElement.textContent = markers.length + 1;
 
-  const marker = new mapboxgl.Marker({
-    element: markerElement,
-    anchor: 'bottom'
-  })
-  .setLngLat([position.lng, position.lat])
-  .addTo(map);
+  // Create Google Maps Advanced Marker (now works with Map ID)
+  const marker = new google.maps.marker.AdvancedMarkerElement({
+    position: { lat: position.lat, lng: position.lng },
+    map: window.map,
+    title: `Marker ${markers.length + 1}`,
+    content: markerElement
+  });
 
   markers.push(marker);
 }
@@ -225,25 +223,21 @@ function addMarker(position) {
 // Sets the map on all markers in the array.
 function setMapOnAll(mapInstance) {
   for (let i = 0; i < markers.length; i++) {
-    if (mapInstance) {
-      markers[i].addTo(mapInstance);
-    } else {
-      markers[i].remove();
-    }
+    markers[i].map = mapInstance || window.map;
   }
 }
 
 // Removes the markers from the map, but keeps them in the array.
 function hideMarkers() {
   for (let i = 0; i < markers.length; i++) {
-    markers[i].remove();
+    markers[i].map = null;
   }
 }
 
 // Shows any markers currently in the array.
 function showMarkers() {
   for (let i = 0; i < markers.length; i++) {
-    markers[i].addTo(map);
+    markers[i].map = window.map;
   }
 }
 
@@ -258,4 +252,5 @@ module.exports = {
   makeDistTable,
   updateDistData,
   updateDistTable,
+  deleteMarkers,
 };

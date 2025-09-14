@@ -44,28 +44,26 @@ if (MAPBOX_TOKEN.length < 1) {
   applog.error("Mapbox API Key not found");
 }
 
-// Load Mapbox GL JS
-const mapboxScript = document.createElement("script");
-mapboxScript.type = "text/javascript";
-mapboxScript.async = true;
-mapboxScript.defer = true;
-mapboxScript.src = "https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js";
-mapboxScript.onload = () => {
-  console.log('✅ Mapbox GL JS loaded successfully');
-  initMap();
-};
-document.getElementsByTagName("head")[0].appendChild(mapboxScript);
-
-// Fallback mechanism in case Mapbox doesn't load
-setTimeout(() => {
-  if (typeof mapboxgl === 'undefined') {
-    console.error('❌ Mapbox GL JS failed to load');
-    const mapElement = document.getElementById("map");
-    if (mapElement) {
-      mapElement.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; background: #f0f0f0; color: #666; font-family: Arial, sans-serif;"><div style="text-align: center;"><h3>🗺️ Map Loading Error</h3><p>Mapbox GL JS failed to load. Please check your internet connection and API key.</p><p>API Key: ' + MAPBOX_TOKEN.substring(0, 10) + '...</p></div></div>';
-    }
+// Load Google Maps API
+const googleMapsScript = document.createElement("script");
+googleMapsScript.type = "text/javascript";
+googleMapsScript.async = true;
+googleMapsScript.defer = true;
+googleMapsScript.src = `https://maps.googleapis.com/maps/api/js?key=${configdata.mapsApiKey}&libraries=geometry&callback=initGoogleMap`;
+googleMapsScript.onerror = () => {
+  console.error('❌ Google Maps API failed to load');
+  const mapElement = document.getElementById("map");
+  if (mapElement) {
+    mapElement.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; background: #f0f0f0; color: #666; font-family: Arial, sans-serif;"><div style="text-align: center;"><h3>🗺️ Map Loading Error</h3><p>Google Maps API failed to load. Please check your internet connection and API key.</p><p>API Key: ' + configdata.mapsApiKey.substring(0, 10) + '...</p></div></div>';
   }
-}, 10000);
+};
+document.getElementsByTagName("head")[0].appendChild(googleMapsScript);
+
+// Import Google Maps implementation
+const { initMap, isMapReady, updateVesselPosition, clearVesselBoxes, updateVesselBox } = require('./google-maps-implementation.js');
+
+// Make initMap globally accessible
+window.initGoogleMap = initMap;
 
 // Import functions
 const { updateDistTable } = require("./sidebarMAN");
@@ -77,7 +75,7 @@ const convert = require("convert-units");
 var disttableheader = ["", "Lat.", "Lon.", 	"\u0394Lat. (ft)", "\u0394Lon. (ft)", "Dist.(ft)"];
 var disttabledata = [["Curr. Pos.", "", "", "0", "0", 0]];
 
-var map; // Mapbox Map Object
+var map; // Google Maps Map Object
 var markers = []; // Markers for distance points
 var zone; // Treatment zone polygon
 var zonepath;
@@ -89,9 +87,14 @@ var settingZoneState = "init";
 var settingPath = false;
 var zoneSelected = false;
 
+// Vessel box system
+var vesselBoxes = []; // Array of vessel box polygons
+var currentVesselBox = null; // Current vessel box
+var previousVesselBoxes = []; // Previous vessel boxes
+
 // Function to check if map is ready
 function isMapReady() {
-  return map && typeof mapboxgl !== 'undefined';
+  return map && typeof google !== 'undefined' && google.maps;
 }
 
 function initMap() {
@@ -347,6 +350,61 @@ function setupMapLayers() {
     }
   });
 
+  // Add vessel box layer (16x40m rectangle around vessel)
+  map.addSource('vessel-boxes', {
+    type: 'geojson',
+    data: {
+      type: 'FeatureCollection',
+      features: []
+    }
+  });
+
+  // Current vessel box (green transparent)
+  map.addLayer({
+    id: 'vessel-box-current',
+    type: 'fill',
+    source: 'vessel-boxes',
+    paint: {
+      'fill-color': '#00FF00',
+      'fill-opacity': 0.3
+    },
+    filter: ['==', ['get', 'type'], 'current']
+  });
+
+  map.addLayer({
+    id: 'vessel-box-current-outline',
+    type: 'line',
+    source: 'vessel-boxes',
+    paint: {
+      'line-color': '#00FF00',
+      'line-width': 2
+    },
+    filter: ['==', ['get', 'type'], 'current']
+  });
+
+  // Previous vessel boxes (less highlighted)
+  map.addLayer({
+    id: 'vessel-box-previous',
+    type: 'fill',
+    source: 'vessel-boxes',
+    paint: {
+      'fill-color': '#00FF00',
+      'fill-opacity': 0.1
+    },
+    filter: ['==', ['get', 'type'], 'previous']
+  });
+
+  map.addLayer({
+    id: 'vessel-box-previous-outline',
+    type: 'line',
+    source: 'vessel-boxes',
+    paint: {
+      'line-color': '#00FF00',
+      'line-width': 1
+    },
+    filter: ['==', ['get', 'type'], 'previous']
+  });
+
   console.log('✅ Map layers setup complete');
 
   // Add Mapbox click event handler
@@ -372,6 +430,102 @@ function addPointToPath(lat, lng) {
     }
   });
   map.getSource('path').setData(currentData);
+}
+
+// Create 16x40m rectangle around vessel position
+function createVesselBox(lat, lng, heading, type = 'current') {
+  const boxLength = 40; // meters
+  const boxWidth = 16;  // meters
+  
+  // Calculate the four corners of the rectangle
+  const halfLength = boxLength / 2;
+  const halfWidth = boxWidth / 2;
+  
+  // Convert heading to radians
+  const headingRad = (heading * Math.PI) / 180;
+  
+  // Calculate offsets for each corner
+  const corners = [
+    { x: -halfLength, y: -halfWidth },  // Bottom-left
+    { x: halfLength, y: -halfWidth },   // Bottom-right
+    { x: halfLength, y: halfWidth },    // Top-right
+    { x: -halfLength, y: halfWidth }    // Top-left
+  ];
+  
+  // Rotate and translate each corner
+  const rotatedCorners = corners.map(corner => {
+    const rotatedX = corner.x * Math.cos(headingRad) - corner.y * Math.sin(headingRad);
+    const rotatedY = corner.x * Math.sin(headingRad) + corner.y * Math.cos(headingRad);
+    
+    // Convert meters to degrees (approximate)
+    const latOffset = rotatedY / 111320; // 1 degree latitude ≈ 111,320 meters
+    const lngOffset = rotatedX / (111320 * Math.cos(lat * Math.PI / 180));
+    
+    return [lng + lngOffset, lat + latOffset];
+  });
+  
+  // Close the polygon
+  rotatedCorners.push(rotatedCorners[0]);
+  
+  return {
+    type: 'Feature',
+    properties: {
+      type: type,
+      timestamp: Date.now()
+    },
+    geometry: {
+      type: 'Polygon',
+      coordinates: [rotatedCorners]
+    }
+  };
+}
+
+// Update vessel box position
+function updateVesselBox(lat, lng, heading) {
+  if (!map || !map.getSource('vessel-boxes')) return;
+  
+  const currentData = map.getSource('vessel-boxes')._data;
+  
+  // Convert previous current box to previous box
+  const currentBoxes = currentData.features.filter(f => f.properties.type === 'current');
+  currentBoxes.forEach(box => {
+    box.properties.type = 'previous';
+  });
+  
+  // Keep only last 10 previous boxes to avoid clutter
+  const previousBoxes = currentData.features.filter(f => f.properties.type === 'previous');
+  if (previousBoxes.length > 10) {
+    previousBoxes.sort((a, b) => b.properties.timestamp - a.properties.timestamp);
+    const toRemove = previousBoxes.slice(10);
+    toRemove.forEach(box => {
+      const index = currentData.features.indexOf(box);
+      if (index > -1) currentData.features.splice(index, 1);
+    });
+  }
+  
+  // Add new current box
+  const newBox = createVesselBox(lat, lng, heading, 'current');
+  currentData.features.push(newBox);
+  
+  // Update the map
+  map.getSource('vessel-boxes').setData(currentData);
+  
+  console.log('📦 Vessel box updated:', {
+    position: [lat.toFixed(6), lng.toFixed(6)],
+    heading: heading.toFixed(1) + '°',
+    totalBoxes: currentData.features.length
+  });
+}
+
+// Clear all vessel boxes
+function clearVesselBoxes() {
+  if (!map || !map.getSource('vessel-boxes')) return;
+  
+  const currentData = map.getSource('vessel-boxes')._data;
+  currentData.features = [];
+  map.getSource('vessel-boxes').setData(currentData);
+  
+  console.log('📦 Vessel boxes cleared');
 }
 
 function addPointToZone(lat, lng) {
@@ -714,12 +868,8 @@ function initGPSReader() {
           console.log('📍 GPS Position:', `Lat: ${pos.lat.toFixed(6)}, Lng: ${pos.lng.toFixed(6)}, Course: ${vesselHeading.toFixed(1)}°, Speed: ${speed.toFixed(1)} kts, GPS Course: ${course.toFixed(1)}°, Moving: ${isMoving}`);
           
           // Update vessel position and rotation on map if map is ready
-          if (isMapReady() && vessel) {
-            vessel.setLngLat([pos.lng, pos.lat]); // Mapbox uses [lng, lat] format
-            vessel.setRotation(vesselHeading); // Rotate the arrow to show direction
-            if (centerOnPos) {
-              map.setCenter([pos.lng, pos.lat]);
-            }
+          if (isMapReady()) {
+            updateVesselPosition(pos.lat, pos.lng, vesselHeading);
           }
         }
       }
@@ -756,12 +906,8 @@ function initGPSReader() {
         console.log('🎯 RTK Position:', `Lat: ${pos.lat.toFixed(6)}, Lng: ${pos.lng.toFixed(6)}, Heading: ${vesselHeading.toFixed(1)}°, Speed: ${speed.toFixed(1)} kts, Course: ${course.toFixed(1)}°, Moving: ${isMoving}`);
         
         // Update vessel position and rotation on map if map is ready
-        if (isMapReady() && vessel) {
-          vessel.setLngLat([pos.lng, pos.lat]); // Mapbox uses [lng, lat] format
-          vessel.setRotation(vesselHeading); // Rotate the arrow to show direction
-          if (centerOnPos) {
-            map.setCenter([pos.lng, pos.lat]);
-          }
+        if (isMapReady()) {
+          updateVesselPosition(pos.lat, pos.lng, vesselHeading);
         }
       }
     });
@@ -841,17 +987,18 @@ function loop() {
     }
 
     // GPS Fix - Update vessel marker appearance
-    if (hasFix && pos && vessel) {
+    if (hasFix && pos) {
       // Update vessel position and rotation on map (position updates are handled in GPS handlers)
-      vessel.setLngLat([pos.lng, pos.lat]);
-      vessel.setRotation(vesselHeading); // Always update rotation, even if 0
+      if (isMapReady()) {
+        updateVesselPosition(pos.lat, pos.lng, vesselHeading);
+      }
       
       // Update vessel state for movement detection
       updateVesselState(pos, 0); // Speed will be calculated from position changes
     } else {
       if (!hasFix) console.log('🚢 ⏳ No GPS fix yet...');
       if (!pos) console.log('🚢 ⏳ No position data yet...');
-      if (!vessel) console.log('🚢 ⏳ Vessel marker not created yet...');
+      if (!isMapReady()) console.log('🚢 ⏳ Map not ready yet...');
     }
 
     // Update gps distance table, if it exists
