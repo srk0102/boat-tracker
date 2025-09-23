@@ -70,7 +70,7 @@ const {
   getVesselCreationDistance,
   setHeadingZero,
   clearHeadingZero,
-  setLogger // << NEW
+  setLogger, // << NEW
 } = require("./google-maps-implementation.js");
 
 // Pipe navlog into the map implementation for calibration logs
@@ -89,7 +89,14 @@ const { setSidebarContents } = require("./sidebar");
 // Data for gps distance
 const haversine = require("haversine");
 const convert = require("convert-units");
-var disttableheader = ["", "Lat.", "Lon.", "\u0394Lat. (ft)", "\u0394Lon. (ft)", "Dist.(ft)"];
+var disttableheader = [
+  "",
+  "Lat.",
+  "Lon.",
+  "\u0394Lat. (ft)",
+  "\u0394Lon. (ft)",
+  "Dist.(ft)",
+];
 var disttabledata = [["Curr. Pos.", "", "", "0", "0", 0]];
 
 // Global variables (map, vessel, vesselBoxes are managed by google-maps-implementation.js)
@@ -108,9 +115,9 @@ var lastValidPos = null;
 var lastUpdateTime = 0;
 var positionHistory = [];
 var isMoving = false;
-var movementThreshold = 1.0; // meters
-var timeThreshold = 500;     // ms
-var minAccuracy = 15.0;      // meters
+var movementThreshold = 0.0; // meters
+var timeThreshold = 500; // ms
+var minAccuracy = 15.0; // meters
 
 // Dual GPS Setup - COM7 as rover, COM12 as base
 var gpsReader = null;
@@ -118,7 +125,7 @@ var vesselHeading = 0;
 var roverConnected = false;
 var baseConnected = false;
 var lastRoverStatus = null; // Track last rover connection status
-var lastBaseStatus = null;  // Track last base connection status
+var lastBaseStatus = null; // Track last base connection status
 
 // Make isTracking globally accessible for sidebar
 var isTracking = false;
@@ -195,7 +202,7 @@ const scheduleMapUpdate = (sample) => {
         const speedMs = (s.speedKts || 0) * 0.514444; // knots -> m/s
         updateVesselPosition(s.lat, s.lng, s.heading, centerOnPos, {
           speedMs,
-          hasRTKHeading: !!s.hasRTKHeading
+          hasRTKHeading: !!s.hasRTKHeading,
         });
       }
     });
@@ -224,7 +231,7 @@ function initGPSReader() {
         lng: data.lng ? data.lng.toFixed(6) : "No data",
         speed: data.speed || 0,
         course: data.course || 0,
-        accuracy: data.accuracy || "Unknown"
+        accuracy: data.accuracy || "Unknown",
       });
 
       if (data.lat && data.lng) {
@@ -253,7 +260,7 @@ function initGPSReader() {
             lng: pos.lng,
             heading: vesselHeading,
             speedKts: speed,
-            hasRTKHeading: false
+            hasRTKHeading: false,
           });
         }
       }
@@ -265,7 +272,7 @@ function initGPSReader() {
           lat: data.rover.lat ? data.rover.lat.toFixed(6) : "No data",
           lng: data.rover.lng ? data.rover.lng.toFixed(6) : "No data",
           speed: data.rover.speed || 0,
-          course: data.rover.course || 0
+          course: data.rover.course || 0,
         });
       }
 
@@ -274,11 +281,15 @@ function initGPSReader() {
           lat: data.base.lat ? data.base.lat.toFixed(6) : "No data",
           lng: data.base.lng ? data.base.lng.toFixed(6) : "No data",
           speed: data.base.speed || 0,
-          course: data.base.course || 0
+          course: data.base.course || 0,
         });
       }
 
-      if (data.rover && data.rover.lat && data.rover.lng) {
+      if (
+        data.rover &&
+        Number.isFinite(data.rover.lat) &&
+        Number.isFinite(data.rover.lng)
+      ) {
         const newPos = { lat: data.rover.lat, lng: data.rover.lng };
         const accuracy = 1.0; // RTK
         const speed = data.rover.speed || 0; // knots
@@ -286,28 +297,27 @@ function initGPSReader() {
 
         pos = newPos;
 
-        // Heading preference: RTK heading -> course -> movement bearing
-        let headingFromRTK = false;
-        if (typeof data.heading === "number" && data.heading >= 0 && data.heading <= 360) {
-          vesselHeading = data.heading;
-          headingFromRTK = true;
+        // ✅ Prefer true RTK yaw only when reader says it's RTK
+        const headingFromRTK = !!data.hasRTKHeading;
+        if (headingFromRTK && Number.isFinite(data.heading)) {
+          vesselHeading = data.heading; // true yaw (base→rover)
         } else if (course > 0 && course <= 360) {
-          vesselHeading = course;
+          vesselHeading = course; // fall back to COG
         } else if (lastValidPos && isMoving) {
-          vesselHeading = computeHeading(lastValidPos, pos);
+          vesselHeading = computeHeading(lastValidPos, pos); // last resort: motion bearing
         }
 
         hasFix = true;
         updateVesselState(pos, speed, accuracy);
 
-        // Schedule map update (RTK wins)
+        // Pass through the RTK flag so the map logic knows when to disable reverse heuristics
         scheduleMapUpdate({
           source: "rtk",
           lat: pos.lat,
           lng: pos.lng,
           heading: vesselHeading,
           speedKts: speed,
-          hasRTKHeading: headingFromRTK
+          hasRTKHeading: headingFromRTK,
         });
       }
     });
@@ -315,7 +325,10 @@ function initGPSReader() {
     gpsReader.on("roverConnected", (connected) => {
       roverConnected = connected;
       if (lastRoverStatus !== connected) {
-        console.log("🔵 Rover GPS Connection:", connected ? "CONNECTED" : "DISCONNECTED");
+        console.log(
+          "🔵 Rover GPS Connection:",
+          connected ? "CONNECTED" : "DISCONNECTED"
+        );
         lastRoverStatus = connected;
       }
       updateGPSStatus();
@@ -324,7 +337,10 @@ function initGPSReader() {
     gpsReader.on("baseConnected", (connected) => {
       baseConnected = connected;
       if (lastBaseStatus !== connected) {
-        console.log("🟡 Base GPS Connection:", connected ? "CONNECTED" : "DISCONNECTED");
+        console.log(
+          "🟡 Base GPS Connection:",
+          connected ? "CONNECTED" : "DISCONNECTED"
+        );
         lastBaseStatus = connected;
       }
       updateGPSStatus();
@@ -376,10 +392,11 @@ function calculateDistance(pos1, pos2) {
   const dLat = ((pos2.lat - pos1.lat) * Math.PI) / 180;
   const dLng = ((pos2.lng - pos1.lng) * Math.PI) / 180;
   const a =
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos((pos1.lat * Math.PI)/180) *
-      Math.cos((pos2.lat * Math.PI)/180) *
-      Math.sin(dLng/2) * Math.sin(dLng/2);
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((pos1.lat * Math.PI) / 180) *
+      Math.cos((pos2.lat * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
@@ -406,7 +423,8 @@ function shouldUpdatePosition(newPos, accuracy = 10.0) {
 
 function updateVesselState(newPos, speed = 0, accuracy = 10.0) {
   const now = Date.now();
-  if (speed > 0.5) { // speed in knots
+  if (speed > 0.5) {
+    // speed in knots
     isMoving = true;
   } else if (lastValidPos) {
     const distance = calculateDistance(lastValidPos, newPos);

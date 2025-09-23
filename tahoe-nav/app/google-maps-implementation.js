@@ -35,8 +35,8 @@ function logCal(msg, extra = {}) {
 }
 
 // ---------- Calibration/heading state ----------
-let ICON_ZERO_BEARING = 0; // 0 if icon faces north, 90 if east (tunable from HUD)
-let NEEDS_180_FLIP = 0; // 180 if pointer looks backwards (tunable from HUD)
+let ICON_ZERO_BEARING = 90; // 0 if icon faces north, 90 if east (tunable from HUD)
+let NEEDS_180_FLIP = 180; // 180 if pointer looks backwards (tunable from HUD)
 let MOUNT_BIAS_DEG = 0; // fine bias if antenna line isn't perfect (tunable from HUD)
 
 const SMOOTHING = 0.25; // angle smoothing 0..1
