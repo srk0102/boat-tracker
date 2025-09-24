@@ -14,7 +14,7 @@ function createWindow() {
   });
 
   // and load the index.html of the app.
-  win.loadFile("app/index.html");
+  win.loadFile("app/two-point-test.html");
 
   // Open the DevTools.
   win.webContents.openDevTools();

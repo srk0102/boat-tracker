@@ -489,6 +489,23 @@ h6 {
   background-image: linear-gradient(to bottom, #fdbc40 0%, #ee9d02 100%);
 }
 
+.btn-purple {
+  color: #fff;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+  border-color: #8e44ad;
+  border-bottom-color: #732d91;
+  background-color: #b085d6;
+  background-image: -webkit-gradient(linear, left top, left bottom, color-stop(0%, #b085d6), color-stop(100%, #8e44ad));
+  background-image: -webkit-linear-gradient(top, #b085d6 0%, #8e44ad 100%);
+  background-image: linear-gradient(to bottom, #b085d6 0%, #8e44ad 100%);
+}
+.btn-purple:active {
+  background-color: #9b59b6;
+  background-image: -webkit-gradient(linear, left top, left bottom, color-stop(0%, #9b59b6), color-stop(100%, #732d91));
+  background-image: -webkit-linear-gradient(top, #9b59b6 0%, #732d91 100%);
+  background-image: linear-gradient(to bottom, #9b59b6 0%, #732d91 100%);
+}
+
 .btn .icon {
   float: left;
   width: 14px;

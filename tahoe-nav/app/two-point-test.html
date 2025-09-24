@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Two Point GPS Test</title>
+    
+    <!-- OpenLayers CSS from CDN -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@7.5.2/ol.css" type="text/css">
+    
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        display: flex;
+        height: 100vh;
+      }
+      
+      .sidebar {
+        width: 350px;
+        background: #2c3e50;
+        color: white;
+        padding: 20px;
+        overflow-y: auto;
+      }
+      
+      .map-container {
+        flex: 1;
+      }
+      
+      #map {
+        width: 100%;
+        height: 100%;
+      }
+      
+      .section {
+        margin: 15px 0;
+        padding: 15px;
+        background: #34495e;
+        border-radius: 5px;
+      }
+      
+      .section h3 {
+        margin: 0 0 10px 0;
+        color: #ecf0f1;
+        font-size: 14px;
+        text-transform: uppercase;
+      }
+      
+      .input-row {
+        display: flex;
+        align-items: center;
+        margin: 8px 0;
+      }
+      
+      .input-row label {
+        width: 80px;
+        font-size: 12px;
+        color: #bdc3c7;
+      }
+      
+      .input-row input {
+        flex: 1;
+        padding: 5px;
+        border: 1px solid #7f8c8d;
+        border-radius: 3px;
+        background: #ecf0f1;
+        color: #2c3e50;
+        font-size: 12px;
+      }
+      
+      button {
+        width: 100%;
+        padding: 10px;
+        margin: 8px 0;
+        border: none;
+        border-radius: 5px;
+        font-size: 12px;
+        font-weight: bold;
+        cursor: pointer;
+        text-transform: uppercase;
+      }
+      
+      .btn-primary { background: #3498db; color: white; }
+      .btn-success { background: #2ecc71; color: white; }
+      .btn-warning { background: #f39c12; color: white; }
+      .btn-danger { background: #e74c3c; color: white; }
+      
+      .status {
+        font-size: 11px;
+        color: #95a5a6;
+        margin: 5px 0;
+      }
+      
+      .coords {
+        font-family: monospace;
+        font-size: 10px;
+        background: #2c3e50;
+        padding: 5px;
+        border-radius: 3px;
+        margin: 5px 0;
+      }
+    </style>
+  </head>
+  
+  <body>
+    <div class="sidebar">
+      <h2>🛥️ Two Point GPS Test</h2>
+      
+      <!-- GPS Status -->
+      <div class="section">
+        <h3>🛰️ GPS Status</h3>
+        <div class="status">Rover (F): <span id="rover-status">No Fix</span></div>
+        <div class="status">Base (B): <span id="base-status">No Fix</span></div>
+        <div class="coords">
+          <strong>Rover (F):</strong><br>
+          <span id="rover-coords">--</span>
+        </div>
+        <div class="coords">
+          <strong>Base (B):</strong><br>
+          <span id="base-coords">--</span>
+        </div>
+      </div>
+      
+      <!-- Vessel Dimensions -->
+      <div class="section">
+        <h3>🛥️ Vessel Dimensions</h3>
+        <div class="input-row">
+          <label>Length (ft):</label>
+          <input type="number" id="vessel-length" value="40" min="1" max="200">
+        </div>
+        <div class="input-row">
+          <label>Width (ft):</label>
+          <input type="number" id="vessel-width" value="16" min="1" max="100">
+        </div>
+      </div>
+      
+      <!-- Controls -->
+      <div class="section">
+        <h3>🎛️ Controls</h3>
+        <button id="start-tracking" class="btn-success">Start Tracking</button>
+        <button id="stop-tracking" class="btn-danger">Stop Tracking</button>
+        <button id="add-point" class="btn-info">Add Point</button>
+        <button id="export-data" class="btn-purple">Export Track</button>
+        <button id="clear-all" class="btn-warning">Clear All</button>
+        <button id="center-map" class="btn-primary">Center on Vessel</button>
+      </div>
+      
+      <!-- Status -->
+      <div class="section">
+        <h3>📊 Status</h3>
+        <div class="status">Connection: <span id="connection-status">Connecting...</span></div>
+        <div class="status">Tracking: <span id="tracking-status">Stopped</span></div>
+        <div class="status">Heading: <span id="heading">--°</span></div>
+        <div class="status">Distance: <span id="distance">--m</span></div>
+        <div class="status">Box Size: <span id="box-size">--</span></div>
+        <div class="status">Path Points: <span id="path-points">0</span></div>
+        <div class="status">Added Points: <span id="added-points">0</span></div>
+      </div>
+    </div>
+    
+    <div class="map-container">
+      <div id="map"></div>
+    </div>
+    
+    <!-- OpenLayers from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/ol@7.5.2/dist/ol.js"></script>
+    
+    <!-- Test Script -->
+    <script src="two-point-test.js"></script>
+  </body>
+</html>
