@@ -52,12 +52,25 @@ function calculateDistance(lat1, lng1, lat2, lng2) {
 try {
   configdata = require("../config.json");
   console.log("✅ Configuration loaded:", configdata);
+  
+  // Update vessel dimensions from config if available
+  if (configdata.boatDimensions) {
+    vesselLength = configdata.boatDimensions.length || 40;
+    vesselWidth = configdata.boatDimensions.width || 16;
+    console.log(`📏 Vessel dimensions from config: ${vesselLength}ft x ${vesselWidth}ft`);
+  }
 } catch (error) {
   console.error("❌ Failed to load config.json:", error);
+  console.error("❌ Please ensure config.json exists with GPS port configuration");
   configdata = {
-    primaryGpsPort: "COM7",
-    secondaryGpsPort: "COM12", 
-    gpsBaudRate: 9600
+    primaryGpsPort: null,
+    secondaryGpsPort: null, 
+    gpsBaudRate: 9600,
+    boatDimensions: {
+      length: 40,
+      width: 16,
+      unit: "feet"
+    }
   };
 }
 
@@ -615,9 +628,16 @@ function createCalibratedVesselBox() {
 // Initialize GPS reader with reconnection logic
 function initGPSReader() {
   try {
-    const primaryPort = configdata.primaryGpsPort || "COM7";
-    const secondaryPort = configdata.secondaryGpsPort || "COM12";
+    const primaryPort = configdata.primaryGpsPort;
+    const secondaryPort = configdata.secondaryGpsPort;
     const baudRate = configdata.gpsBaudRate || 9600;
+    
+    // Check if ports are configured
+    if (!primaryPort || !secondaryPort) {
+      console.error("❌ GPS ports not configured in config.json");
+      console.error("❌ Please set primaryGpsPort and secondaryGpsPort in config.json");
+      return;
+    }
     
     console.log(`🛰️ Initializing dual u-blox GPS: ${primaryPort} (Rover) & ${secondaryPort} (Base) @ ${baudRate} baud`);
     
@@ -888,9 +908,34 @@ function saveToFile(filename, data, mimeType) {
   }
 }
 
+// Update UI with config values
+function updateUIWithConfig() {
+  try {
+    // Update vessel dimension input fields with config values
+    const lengthInput = document.getElementById('vessel-length');
+    const widthInput = document.getElementById('vessel-width');
+    
+    if (lengthInput && vesselLength) {
+      lengthInput.value = vesselLength;
+    }
+    
+    if (widthInput && vesselWidth) {
+      widthInput.value = vesselWidth;
+    }
+    
+    console.log('🎛️ UI updated with config values');
+    
+  } catch (error) {
+    console.error('❌ Failed to update UI with config:', error);
+  }
+}
+
 // Initialize when page loads
 document.addEventListener("DOMContentLoaded", () => {
   console.log('🚀 Real GPS two-point test starting...');
+  
+  // Update UI with config values
+  updateUIWithConfig();
   
   // Initialize map
   initMap();
