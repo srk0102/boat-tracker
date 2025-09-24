@@ -93,33 +93,24 @@ function angleDifference(a1, a2) {
 function smoothHeading(newHeading, speed) {
   // Normalize the new heading
   newHeading = normalizeAngle(newHeading);
-  
-  // If we're moving fast enough, use the new heading
-  if (speed >= MIN_SPEED_FOR_HEADING) {
-    // Add to history
-    headingHistory.push(newHeading);
-    if (headingHistory.length > MAX_HEADING_HISTORY) {
-      headingHistory.shift();
-    }
-    
-    // Calculate smoothed heading using exponential moving average
-    if (headingHistory.length === 1) {
-      currentHeading = newHeading;
-    } else {
-      // Use angular difference to handle 0/360 wraparound
-      const diff = angleDifference(currentHeading, newHeading);
-      currentHeading = normalizeAngle(currentHeading + (diff * HEADING_SMOOTHING_FACTOR));
-    }
-    
-    lastValidHeading = currentHeading;
-    
-    console.log(`🧭 Speed: ${speed.toFixed(2)}mph, Raw heading: ${newHeading.toFixed(1)}°, Smoothed: ${currentHeading.toFixed(1)}°`);
-  } else {
-    // Moving too slowly - keep the last valid heading
+
+  if (speed < MIN_SPEED_FOR_HEADING) {
+    // Too slow, hold last valid heading
     currentHeading = lastValidHeading;
-    console.log(`🐌 Speed too low (${speed.toFixed(2)}mph), using last valid heading: ${currentHeading.toFixed(1)}°`);
+    console.log(`🐌 Speed too low (${speed.toFixed(2)}mph), holding last valid heading: ${currentHeading.toFixed(1)}°`);
+  } else if (speed < 3.0) {
+    // Low speed, use raw heading for accuracy
+    currentHeading = newHeading;
+    lastValidHeading = currentHeading;
+    console.log(`🚶‍♂️ Low speed (${speed.toFixed(2)}mph), using raw heading: ${currentHeading.toFixed(1)}°`);
+  } else {
+    // High speed, apply smoothing to reduce jitter
+    const smoothingFactor = 0.15; // or use HEADING_SMOOTHING_FACTOR
+    const diff = angleDifference(currentHeading, newHeading);
+    currentHeading = normalizeAngle(currentHeading + (diff * smoothingFactor));
+    lastValidHeading = currentHeading;
+    console.log(`🏎️ High speed (${speed.toFixed(2)}mph), smoothed heading: ${currentHeading.toFixed(1)}°`);
   }
-  
   return currentHeading;
 }
 
@@ -542,53 +533,51 @@ function addPoint() {
     console.log('❌ Cannot add point - no GPS fix');
     return;
   }
-  
-  console.log('📍 Adding point at current vessel position...');
-  
+
+  console.log('📍 Adding point at current vessel position (centered, new method)...');
+
   // Get current vessel center position
   const centerLat = (roverGPS.lat + baseGPS.lat) / 2;
   const centerLng = (roverGPS.lng + baseGPS.lng) / 2;
-  
+
   // Get vessel dimensions
   const lengthFeet = parseFloat(document.getElementById('vessel-length').value) || 40;
   const widthFeet = parseFloat(document.getElementById('vessel-width').value) || 16;
-  
-  // Convert feet to degrees (same as calibrated box)
-  const lengthDegrees = lengthFeet / 364000; // Length in degrees
-  const widthDegrees = widthFeet / (364000 * Math.cos(centerLat * Math.PI / 180)); // Width in degrees
-  
-  // Create a transparent green box at this position
-  const halfLength = lengthDegrees / 2;
-  const halfWidth = widthDegrees / 2;
-  
-  // Calculate heading from rover to base
+  const lengthMeters = lengthFeet * 0.3048;
+  const widthMeters = widthFeet * 0.3048;
+
+  // Calculate heading from base to rover
   const heading = calculateBearing(roverGPS.lat, roverGPS.lng, baseGPS.lat, baseGPS.lng);
   const headingRad = (heading * Math.PI) / 180;
-  
-  // Calculate box corners (same method as calibrated box)
-  const corners = [
+
+  // Rectangle is centered at centerLat/centerLng, lengthMeters long, widthMeters wide, rotated by headingRad
+  const halfLength = lengthMeters / 2;
+  const halfWidth = widthMeters / 2;
+  const cornersLocal = [
     { x: -halfLength, y: -halfWidth },
-    { x: halfLength, y: -halfWidth },
-    { x: halfLength, y: halfWidth },
     { x: -halfLength, y: halfWidth },
+    { x: halfLength, y: halfWidth },
+    { x: halfLength, y: -halfWidth }
   ];
-  
-  const rotatedCorners = corners.map((corner) => {
-    const rotatedX = corner.x * Math.cos(headingRad) - corner.y * Math.sin(headingRad);
-    const rotatedY = corner.x * Math.sin(headingRad) + corner.y * Math.cos(headingRad);
-    
+
+  // Convert local offsets to lat/lng
+  const earthRadius = 6378137; // meters
+  const degToRad = Math.PI / 180;
+  const radToDeg = 180 / Math.PI;
+  function offsetToLatLng(lat, lng, xForward, yLeft) {
+    const dLat = (xForward * Math.cos(headingRad) - yLeft * Math.sin(headingRad)) / earthRadius;
+    const dLng = (xForward * Math.sin(headingRad) + yLeft * Math.cos(headingRad)) / (earthRadius * Math.cos(lat * degToRad));
     return [
-      centerLng + rotatedX, // longitude
-      centerLat + rotatedY  // latitude
+      lng + dLng * radToDeg,
+      lat + dLat * radToDeg
     ];
-  });
-  
-  // Close the polygon
-  rotatedCorners.push(rotatedCorners[0]);
-  
+  }
+  const corners = cornersLocal.map(corner => offsetToLatLng(centerLat, centerLng, corner.x, corner.y));
+  corners.push(corners[0]);
+
   // Convert to map projection
-  const projectedCorners = rotatedCorners.map(corner => ol.proj.fromLonLat(corner));
-  
+  const projectedCorners = corners.map(corner => ol.proj.fromLonLat(corner));
+
   // Create the transparent green box feature
   const addedPointFeature = new ol.Feature({
     geometry: new ol.geom.Polygon([projectedCorners]),
@@ -596,7 +585,7 @@ function addPoint() {
     position: { lat: centerLat, lng: centerLng },
     heading: heading
   });
-  
+
   // Add to source and array
   addedPointsSource.addFeature(addedPointFeature);
   addedPoints.push({
@@ -605,10 +594,10 @@ function addPoint() {
     heading: heading,
     timestamp: new Date().toISOString()
   });
-  
+
   console.log('✅ Point added! Total points:', addedPoints.length);
   console.log('📍 Point position:', { lat: centerLat.toFixed(6), lng: centerLng.toFixed(6), heading: heading.toFixed(1) });
-  
+
   // Update UI
   updateUI();
 }
@@ -723,65 +712,66 @@ function createCalibratedVesselBox() {
 // Create a properly calibrated vessel box with smoothed heading
 function createCalibratedVesselBoxWithHeading(smoothedHeading) {
   if (!roverGPS.fix || !baseGPS.fix) return;
-  
-  console.log('🟢 CREATING SMOOTHED VESSEL BOX');
-  
+
+  console.log('🟢 CREATING SMOOTHED VESSEL BOX (centered, base/rover offset 0.5m)');
+
   // Clear existing box
   vesselBoxSource.clear();
-  
+
   // Get vessel dimensions from inputs
   const lengthFeet = parseFloat(document.getElementById('vessel-length').value) || 40;
   const widthFeet = parseFloat(document.getElementById('vessel-width').value) || 16;
-  
-  // Convert feet to degrees (approximate)
-  const avgLat = (roverGPS.lat + baseGPS.lat) / 2;
-  const lengthDegrees = lengthFeet / 364000; // Length in degrees
-  const widthDegrees = widthFeet / (364000 * Math.cos(avgLat * Math.PI / 180)); // Width in degrees
-  
-  // Center the box between the two GPS points
-  const centerLat = (roverGPS.lat + baseGPS.lat) / 2;
-  const centerLng = (roverGPS.lng + baseGPS.lng) / 2;
-  
-  // Use smoothed heading instead of raw GPS heading
+
+  // Convert feet to meters
+  const lengthMeters = lengthFeet * 0.3048;
+  const widthMeters = widthFeet * 0.3048;
+
+  // Heading in radians (from base to rover)
   const headingRad = (smoothedHeading * Math.PI) / 180;
-  
-  console.log('🧭 Smoothed heading:', smoothedHeading.toFixed(1) + '°', 'Speed:', currentSpeed.toFixed(2) + 'mph');
-  
-  // Calculate box corners relative to center
-  const halfLength = lengthDegrees / 2;
-  const halfWidth = widthDegrees / 2;
-  
-  // Define corners before rotation (relative to center)
-  const corners = [
-    { x: -halfLength, y: -halfWidth }, // Bottom left
-    { x: halfLength, y: -halfWidth },  // Bottom right
-    { x: halfLength, y: halfWidth },   // Top right
-    { x: -halfLength, y: halfWidth }   // Top left
+
+  // The physical center of the boat is halfway between base and rover, but base is 0.5m behind center, rover is 0.5m ahead
+  // So, the center is at (base + rover)/2
+  const centerLat = (baseGPS.lat + roverGPS.lat) / 2;
+  const centerLng = (baseGPS.lng + roverGPS.lng) / 2;
+
+  // Rectangle is centered at centerLat/centerLng, lengthMeters long, widthMeters wide, rotated by headingRad
+  // Local rectangle corners (relative to center):
+  const halfLength = lengthMeters / 2;
+  const halfWidth = widthMeters / 2;
+  const cornersLocal = [
+    { x: -halfLength, y: -halfWidth }, // rear left
+    { x: -halfLength, y: halfWidth },  // rear right
+    { x: halfLength, y: halfWidth },   // front right
+    { x: halfLength, y: -halfWidth }   // front left
   ];
-  
-  // Rotate corners based on smoothed heading
-  const rotatedCorners = corners.map((corner) => {
-    const rotatedX = corner.x * Math.cos(headingRad) - corner.y * Math.sin(headingRad);
-    const rotatedY = corner.x * Math.sin(headingRad) + corner.y * Math.cos(headingRad);
-    
+
+  // Convert local offsets to lat/lng
+  const earthRadius = 6378137; // meters
+  const degToRad = Math.PI / 180;
+  const radToDeg = 180 / Math.PI;
+
+  function offsetToLatLng(lat, lng, xForward, yLeft) {
+    // Move xForward meters in heading direction, yLeft meters left of heading
+    const dLat = (xForward * Math.cos(headingRad) - yLeft * Math.sin(headingRad)) / earthRadius;
+    const dLng = (xForward * Math.sin(headingRad) + yLeft * Math.cos(headingRad)) / (earthRadius * Math.cos(lat * degToRad));
     return [
-      centerLng + rotatedX, // longitude
-      centerLat + rotatedY  // latitude
+      lng + dLng * radToDeg,
+      lat + dLat * radToDeg
     ];
-  });
-  
-  // Close the polygon
-  rotatedCorners.push(rotatedCorners[0]);
-  
+  }
+
+  const corners = cornersLocal.map(corner => offsetToLatLng(centerLat, centerLng, corner.x, corner.y));
+  corners.push(corners[0]); // close polygon
+
   // Convert to map projection
-  const projectedCorners = rotatedCorners.map(corner => ol.proj.fromLonLat(corner));
-  
+  const projectedCorners = corners.map(corner => ol.proj.fromLonLat(corner));
+
   const vesselBoxFeature = new ol.Feature({
     geometry: new ol.geom.Polygon([projectedCorners])
   });
-  
+
   vesselBoxSource.addFeature(vesselBoxFeature);
-  
+
   // Force refresh
   map.render();
 }
@@ -1004,7 +994,7 @@ function exportMapImage(filename) {
     setTimeout(() => {
       console.log('📸 Starting high-quality image capture...');
       captureMapImage(filename, currentCenter, currentZoom);
-    }, 2500); // Give more time for tiles to load at new zoom level
+    }, 6000); // Give more time for tiles to load at new zoom level
     
   } catch (error) {
     console.error('❌ Map image export failed:', error);
