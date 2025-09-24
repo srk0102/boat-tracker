@@ -22,6 +22,16 @@ var hasAutoCentered = false; // Track if we've auto-centered on startup
 var reconnectInterval = null; // For GPS reconnection attempts
 var isReconnecting = false;
 
+// Heading smoothing variables
+var currentHeading = 0; // Current smoothed heading
+var headingHistory = []; // Store recent headings for smoothing
+var lastValidHeading = 0; // Last reliable heading when moving fast enough
+var previousPosition = null; // For speed calculation
+var currentSpeed = 0; // Current speed in mph
+var MIN_SPEED_FOR_HEADING = 0.3; // Minimum speed (mph) to trust GPS heading
+var HEADING_SMOOTHING_FACTOR = 0.15; // Lower = more smoothing (0.1-0.3)
+var MAX_HEADING_HISTORY = 10; // Number of headings to keep for smoothing
+
 // Calculate bearing between two GPS points
 function calculateBearing(lat1, lng1, lat2, lng2) {
   const dLng = ((lng2 - lng1) * Math.PI) / 180;
@@ -46,6 +56,71 @@ function calculateDistance(lat1, lng1, lat2, lng2) {
     Math.sin(dLng / 2) * Math.sin(dLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
+}
+
+// Calculate speed from position change
+function calculateSpeed(currentPos, previousPos, timeDelta) {
+  if (!previousPos || timeDelta <= 0) return 0;
+  
+  const distance = calculateDistance(
+    previousPos.lat, previousPos.lng,
+    currentPos.lat, currentPos.lng
+  );
+  
+  // Convert to mph (meters per second to mph)
+  const speedMps = distance / (timeDelta / 1000); // m/s
+  const speedMph = speedMps * 2.237; // Convert to mph
+  
+  return speedMph;
+}
+
+// Normalize angle to 0-360 range
+function normalizeAngle(angle) {
+  while (angle < 0) angle += 360;
+  while (angle >= 360) angle -= 360;
+  return angle;
+}
+
+// Calculate the shortest angular difference between two headings
+function angleDifference(a1, a2) {
+  let diff = a2 - a1;
+  while (diff > 180) diff -= 360;
+  while (diff < -180) diff += 360;
+  return diff;
+}
+
+// Smooth heading using exponential moving average and speed filtering
+function smoothHeading(newHeading, speed) {
+  // Normalize the new heading
+  newHeading = normalizeAngle(newHeading);
+  
+  // If we're moving fast enough, use the new heading
+  if (speed >= MIN_SPEED_FOR_HEADING) {
+    // Add to history
+    headingHistory.push(newHeading);
+    if (headingHistory.length > MAX_HEADING_HISTORY) {
+      headingHistory.shift();
+    }
+    
+    // Calculate smoothed heading using exponential moving average
+    if (headingHistory.length === 1) {
+      currentHeading = newHeading;
+    } else {
+      // Use angular difference to handle 0/360 wraparound
+      const diff = angleDifference(currentHeading, newHeading);
+      currentHeading = normalizeAngle(currentHeading + (diff * HEADING_SMOOTHING_FACTOR));
+    }
+    
+    lastValidHeading = currentHeading;
+    
+    console.log(`🧭 Speed: ${speed.toFixed(2)}mph, Raw heading: ${newHeading.toFixed(1)}°, Smoothed: ${currentHeading.toFixed(1)}°`);
+  } else {
+    // Moving too slowly - keep the last valid heading
+    currentHeading = lastValidHeading;
+    console.log(`🐌 Speed too low (${speed.toFixed(2)}mph), using last valid heading: ${currentHeading.toFixed(1)}°`);
+  }
+  
+  return currentHeading;
 }
 
 // Load configuration
@@ -205,12 +280,29 @@ function updateDualGPS(primary, secondary) {
     base: { lat: baseGPS.lat?.toFixed(6), lng: baseGPS.lng?.toFixed(6), fix: baseGPS.fix }
   });
   
-  // Update UI
-  updateUI();
-  
   if (roverGPS.fix && baseGPS.fix) {
-    // Use properly calibrated vessel box
-    createCalibratedVesselBox();
+    // Calculate current vessel center position
+    const centerLat = (roverGPS.lat + baseGPS.lat) / 2;
+    const centerLng = (roverGPS.lng + baseGPS.lng) / 2;
+    const currentPosition = { lat: centerLat, lng: centerLng, timestamp: Date.now() };
+    
+    // Calculate speed if we have a previous position
+    if (previousPosition && previousPosition.timestamp) {
+      const timeDelta = currentPosition.timestamp - previousPosition.timestamp;
+      currentSpeed = calculateSpeed(currentPosition, previousPosition, timeDelta);
+    }
+    
+    // Calculate raw heading from rover to base
+    const rawHeading = calculateBearing(roverGPS.lat, roverGPS.lng, baseGPS.lat, baseGPS.lng);
+    
+    // Apply heading smoothing based on speed
+    const smoothedHeading = smoothHeading(rawHeading, currentSpeed);
+    
+    // Store current position for next speed calculation
+    previousPosition = currentPosition;
+    
+    // Use properly calibrated vessel box with smoothed heading
+    createCalibratedVesselBoxWithHeading(smoothedHeading);
     
     // Auto-center on vessel on first GPS fix
     if (!hasAutoCentered) {
@@ -221,17 +313,19 @@ function updateDualGPS(primary, secondary) {
     
     // Add to path if tracking
     if (isTracking) {
-      const centerLat = (roverGPS.lat + baseGPS.lat) / 2;
-      const centerLng = (roverGPS.lng + baseGPS.lng) / 2;
       pathPoints.push({ 
         lat: centerLat, 
         lng: centerLng, 
         timestamp: new Date().toISOString(),
-        heading: calculateBearing(roverGPS.lat, roverGPS.lng, baseGPS.lat, baseGPS.lng)
+        heading: smoothedHeading,
+        speed: currentSpeed
       });
       updatePathLine();
     }
   }
+  
+  // Update UI
+  updateUI();
 }
 
 // Create vessel box between rover and base GPS points
@@ -348,7 +442,7 @@ function createVesselBox() {
   console.log('🟢 Map render forced!');
   
   // Update status display
-  updateStatus(heading, distance, length, width);
+  updateStatus(currentHeading, distance, length, width);
   
   console.log('✅ Real GPS vessel box created successfully!');
 }
@@ -360,6 +454,7 @@ function updateStatus(heading, distance, length, width) {
   document.getElementById('box-size').textContent = `${length}ft x ${width}ft`;
   document.getElementById('path-points').textContent = pathPoints.length.toString();
   document.getElementById('added-points').textContent = addedPoints.length.toString();
+  document.getElementById('speed').textContent = currentSpeed.toFixed(2) + 'mph';
 }
 
 function updateUI() {
@@ -625,6 +720,72 @@ function createCalibratedVesselBox() {
   map.render();
 }
 
+// Create a properly calibrated vessel box with smoothed heading
+function createCalibratedVesselBoxWithHeading(smoothedHeading) {
+  if (!roverGPS.fix || !baseGPS.fix) return;
+  
+  console.log('🟢 CREATING SMOOTHED VESSEL BOX');
+  
+  // Clear existing box
+  vesselBoxSource.clear();
+  
+  // Get vessel dimensions from inputs
+  const lengthFeet = parseFloat(document.getElementById('vessel-length').value) || 40;
+  const widthFeet = parseFloat(document.getElementById('vessel-width').value) || 16;
+  
+  // Convert feet to degrees (approximate)
+  const avgLat = (roverGPS.lat + baseGPS.lat) / 2;
+  const lengthDegrees = lengthFeet / 364000; // Length in degrees
+  const widthDegrees = widthFeet / (364000 * Math.cos(avgLat * Math.PI / 180)); // Width in degrees
+  
+  // Center the box between the two GPS points
+  const centerLat = (roverGPS.lat + baseGPS.lat) / 2;
+  const centerLng = (roverGPS.lng + baseGPS.lng) / 2;
+  
+  // Use smoothed heading instead of raw GPS heading
+  const headingRad = (smoothedHeading * Math.PI) / 180;
+  
+  console.log('🧭 Smoothed heading:', smoothedHeading.toFixed(1) + '°', 'Speed:', currentSpeed.toFixed(2) + 'mph');
+  
+  // Calculate box corners relative to center
+  const halfLength = lengthDegrees / 2;
+  const halfWidth = widthDegrees / 2;
+  
+  // Define corners before rotation (relative to center)
+  const corners = [
+    { x: -halfLength, y: -halfWidth }, // Bottom left
+    { x: halfLength, y: -halfWidth },  // Bottom right
+    { x: halfLength, y: halfWidth },   // Top right
+    { x: -halfLength, y: halfWidth }   // Top left
+  ];
+  
+  // Rotate corners based on smoothed heading
+  const rotatedCorners = corners.map((corner) => {
+    const rotatedX = corner.x * Math.cos(headingRad) - corner.y * Math.sin(headingRad);
+    const rotatedY = corner.x * Math.sin(headingRad) + corner.y * Math.cos(headingRad);
+    
+    return [
+      centerLng + rotatedX, // longitude
+      centerLat + rotatedY  // latitude
+    ];
+  });
+  
+  // Close the polygon
+  rotatedCorners.push(rotatedCorners[0]);
+  
+  // Convert to map projection
+  const projectedCorners = rotatedCorners.map(corner => ol.proj.fromLonLat(corner));
+  
+  const vesselBoxFeature = new ol.Feature({
+    geometry: new ol.geom.Polygon([projectedCorners])
+  });
+  
+  vesselBoxSource.addFeature(vesselBoxFeature);
+  
+  // Force refresh
+  map.render();
+}
+
 // Initialize GPS reader with reconnection logic
 function initGPSReader() {
   try {
@@ -802,82 +963,449 @@ function exportTrackingData() {
   }
 }
 
-// Export map as image
+// Export map as image with full tracking data
 function exportMapImage(filename) {
   try {
-    console.log('🖼️ Generating map image...');
+    console.log('🖼️ Generating complete tracking map image...');
     
-    // Get map canvas
-    const mapCanvas = document.querySelector('#map canvas');
-    if (!mapCanvas) {
-      console.error('❌ Could not find map canvas');
+    // Store current map state
+    const currentCenter = map.getView().getCenter();
+    const currentZoom = map.getView().getZoom();
+    
+    // Calculate bounds for all tracking data
+    const bounds = calculateTrackingBounds();
+    if (!bounds) {
+      console.error('❌ No tracking data to export');
       return;
     }
     
-    // Create a new canvas for the export
-    const exportCanvas = document.createElement('canvas');
-    const ctx = exportCanvas.getContext('2d');
+    console.log('📍 Tracking bounds:', bounds);
     
-    // Set canvas size (high resolution for better quality)
-    const width = 1920;
-    const height = 1080;
-    exportCanvas.width = width;
-    exportCanvas.height = height;
+    // Set map view to show all tracking data
+    const extent = ol.proj.transformExtent(
+      [bounds.minLng, bounds.minLat, bounds.maxLng, bounds.maxLat],
+      'EPSG:4326',
+      'EPSG:3857'
+    );
     
-    // Fill background
-    ctx.fillStyle = '#f0f0f0';
-    ctx.fillRect(0, 0, width, height);
+    // Add padding around the extent
+    const padding = 200; // pixels
+    map.getView().fit(extent, {
+      padding: [padding, padding, padding, padding],
+      maxZoom: 18 // Don't zoom in too much
+    });
     
-    // Draw map
-    ctx.drawImage(mapCanvas, 0, 0, width, height);
+    console.log('🎯 Map view adjusted for full tracking data');
     
-    // Add title and metadata overlay
-    addMapOverlay(ctx, width, height, filename);
+    // Show progress to user
+    console.log('⏳ Waiting for high-resolution tiles to load...');
     
-    // Convert to blob and save
-    exportCanvas.toBlob((blob) => {
-      if (blob) {
-        saveToFile(`${filename}.png`, blob, 'image/png');
-        console.log('✅ Map image exported successfully!');
-      } else {
-        console.error('❌ Failed to create image blob');
-      }
-    }, 'image/png', 0.95);
+    // Wait longer for high-quality tiles to load
+    setTimeout(() => {
+      console.log('📸 Starting high-quality image capture...');
+      captureMapImage(filename, currentCenter, currentZoom);
+    }, 2500); // Give more time for tiles to load at new zoom level
     
   } catch (error) {
     console.error('❌ Map image export failed:', error);
   }
 }
 
-// Add overlay information to map image
-function addMapOverlay(ctx, width, height, filename) {
-  // Semi-transparent overlay background
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-  ctx.fillRect(0, 0, width, 80);
+// Calculate bounds that include all tracking data
+function calculateTrackingBounds() {
+  const allPoints = [];
   
-  // Title
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 24px Arial';
-  ctx.fillText('Vessel Tracking Data', 20, 35);
-  
-  // Timestamp
-  ctx.font = '16px Arial';
-  ctx.fillText(`Exported: ${new Date().toLocaleString()}`, 20, 60);
-  
-  // Statistics in top right
-  const stats = [
-    `Path Points: ${pathPoints.length}`,
-    `Added Points: ${addedPoints.length}`,
-    `Vessel: ${vesselLength}ft x ${vesselWidth}ft`
-  ];
-  
-  ctx.textAlign = 'right';
-  stats.forEach((stat, index) => {
-    ctx.fillText(stat, width - 20, 25 + (index * 20));
+  // Add path points
+  pathPoints.forEach(point => {
+    allPoints.push({ lat: point.lat, lng: point.lng });
   });
   
-  // Reset text align
+  // Add added points
+  addedPoints.forEach(point => {
+    allPoints.push({ lat: point.lat, lng: point.lng });
+  });
+  
+  // Add current vessel position
+  if (roverGPS.fix && baseGPS.fix) {
+    allPoints.push({ lat: roverGPS.lat, lng: roverGPS.lng });
+    allPoints.push({ lat: baseGPS.lat, lng: baseGPS.lng });
+  }
+  
+  if (allPoints.length === 0) {
+    return null;
+  }
+  
+  // Calculate min/max bounds
+  let minLat = allPoints[0].lat;
+  let maxLat = allPoints[0].lat;
+  let minLng = allPoints[0].lng;
+  let maxLng = allPoints[0].lng;
+  
+  allPoints.forEach(point => {
+    minLat = Math.min(minLat, point.lat);
+    maxLat = Math.max(maxLat, point.lat);
+    minLng = Math.min(minLng, point.lng);
+    maxLng = Math.max(maxLng, point.lng);
+  });
+  
+  // Add some padding to the bounds
+  const latPadding = (maxLat - minLat) * 0.1 || 0.001;
+  const lngPadding = (maxLng - minLng) * 0.1 || 0.001;
+  
+  return {
+    minLat: minLat - latPadding,
+    maxLat: maxLat + latPadding,
+    minLng: minLng - lngPadding,
+    maxLng: maxLng + lngPadding,
+    totalPoints: allPoints.length
+  };
+}
+
+// Capture the map image after view adjustment with high quality
+function captureMapImage(filename, originalCenter, originalZoom) {
+  try {
+    console.log('📸 Capturing high-quality map image...');
+    
+    // Get all map canvases (OpenLayers may use multiple layers)
+    const mapContainer = document.querySelector('#map');
+    const mapCanvases = mapContainer.querySelectorAll('canvas');
+    
+    if (mapCanvases.length === 0) {
+      console.error('❌ Could not find map canvas');
+      restoreMapView(originalCenter, originalZoom);
+      return;
+    }
+    
+    console.log(`🎨 Found ${mapCanvases.length} map canvas(es)`);
+    
+    // Get the actual map dimensions
+    const mapRect = mapContainer.getBoundingClientRect();
+    const mapWidth = mapRect.width;
+    const mapHeight = mapRect.height;
+    
+    console.log(`📐 Map dimensions: ${mapWidth} x ${mapHeight}`);
+    
+    // Create ultra high-resolution export canvas
+    const scaleFactor = 3; // 3x resolution for ultra crisp images
+    const sidebarWidth = 400; // Width for side information panels
+    const exportWidth = Math.round(mapWidth * scaleFactor) + (sidebarWidth * 2 * scaleFactor);
+    const exportHeight = Math.round(mapHeight * scaleFactor);
+    
+    const exportCanvas = document.createElement('canvas');
+    const ctx = exportCanvas.getContext('2d');
+    
+    // Set high resolution canvas
+    exportCanvas.width = exportWidth;
+    exportCanvas.height = exportHeight;
+    
+    // Enable high-quality rendering
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    
+    console.log(`🎯 Export canvas: ${exportWidth} x ${exportHeight} (${scaleFactor}x scale)`);
+    
+    // Fill with clean background
+    ctx.fillStyle = '#f5f5f5';
+    ctx.fillRect(0, 0, exportWidth, exportHeight);
+    
+    // Calculate map position (centered with sidebars)
+    const mapStartX = sidebarWidth * scaleFactor;
+    const mapWidth_scaled = Math.round(mapWidth * scaleFactor);
+    const mapHeight_scaled = Math.round(mapHeight * scaleFactor);
+    
+    console.log(`🗺️ Map will be positioned at: ${mapStartX}, 0 with size ${mapWidth_scaled} x ${mapHeight_scaled}`);
+    
+    // Draw all map canvases in the center area
+    mapCanvases.forEach((canvas, index) => {
+      if (canvas.width > 0 && canvas.height > 0) {
+        console.log(`🖼️ Drawing canvas ${index + 1}: ${canvas.width} x ${canvas.height}`);
+        
+        // Draw the map canvas in the center area between sidebars
+        ctx.drawImage(
+          canvas,
+          0, 0, canvas.width, canvas.height,
+          mapStartX, 0, mapWidth_scaled, mapHeight_scaled
+        );
+      }
+    });
+    
+    // Add side panel overlays with tracking data
+    addSidePanelOverlays(ctx, exportWidth, exportHeight, scaleFactor, sidebarWidth, filename);
+    
+    // Convert to blob with maximum quality
+    exportCanvas.toBlob((blob) => {
+      if (blob) {
+        saveToFile(`${filename}.png`, blob, 'image/png');
+        console.log('✅ High-quality tracking map exported successfully!');
+        console.log(`📊 Final image size: ${exportWidth} x ${exportHeight} pixels`);
+      } else {
+        console.error('❌ Failed to create image blob');
+      }
+      
+      // Restore original map view
+      restoreMapView(originalCenter, originalZoom);
+    }, 'image/png', 1.0); // Maximum quality
+    
+  } catch (error) {
+    console.error('❌ High-quality map capture failed:', error);
+    restoreMapView(originalCenter, originalZoom);
+  }
+}
+
+// Restore original map view
+function restoreMapView(center, zoom) {
+  try {
+    map.getView().setCenter(center);
+    map.getView().setZoom(zoom);
+    console.log('🔄 Map view restored to original position');
+  } catch (error) {
+    console.error('❌ Failed to restore map view:', error);
+  }
+}
+
+// Add side panel overlays with tracking data for clear map visibility
+function addSidePanelOverlays(ctx, width, height, scaleFactor, sidebarWidth, filename) {
+  // Calculate tracking statistics
+  const trackingStats = calculateTrackingStatistics();
+  
+  // Scale all dimensions and fonts
+  const s = scaleFactor;
+  const panelWidth = sidebarWidth * s;
+  
+  // Enable text anti-aliasing
+  ctx.textBaseline = 'top';
+  ctx.textRenderingOptimization = 'optimizeQuality';
+  
+  // LEFT PANEL - Main Information
+  ctx.fillStyle = 'rgba(0, 30, 60, 0.95)'; // Dark blue background
+  ctx.fillRect(0, 0, panelWidth, height);
+  
+  // Left panel border
+  ctx.strokeStyle = '#00ff00';
+  ctx.lineWidth = 3 * s;
+  ctx.strokeRect(0, 0, panelWidth, height);
+  
+  // LEFT PANEL CONTENT
+  ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'left';
+  
+  let yPos = 30 * s;
+  const lineHeight = 35 * s;
+  const margin = 20 * s;
+  
+  // Title
+  ctx.font = `bold ${28 * s}px Arial, sans-serif`;
+  ctx.fillStyle = '#00ff00';
+  ctx.fillText('🛥️ VESSEL', margin, yPos);
+  yPos += lineHeight;
+  ctx.fillText('TRACKING', margin, yPos);
+  yPos += lineHeight + 10 * s;
+  
+  // Export info
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold ${16 * s}px Arial, sans-serif`;
+  ctx.fillText('📅 EXPORT INFO:', margin, yPos);
+  yPos += 25 * s;
+  
+  ctx.font = `${14 * s}px Arial, sans-serif`;
+  const exportTime = new Date().toLocaleString();
+  ctx.fillText(`Date: ${exportTime.split(',')[0]}`, margin, yPos);
+  yPos += 20 * s;
+  ctx.fillText(`Time: ${exportTime.split(',')[1]}`, margin, yPos);
+  yPos += 30 * s;
+  
+  // Tracking period
+  ctx.font = `bold ${16 * s}px Arial, sans-serif`;
+  ctx.fillText('⏱️ TRACKING PERIOD:', margin, yPos);
+  yPos += 25 * s;
+  
+  ctx.font = `${14 * s}px Arial, sans-serif`;
+  if (trackingStats.startTime && trackingStats.endTime) {
+    ctx.fillText(`Start: ${trackingStats.startTime}`, margin, yPos);
+    yPos += 20 * s;
+    ctx.fillText(`End: ${trackingStats.endTime}`, margin, yPos);
+    yPos += 20 * s;
+    ctx.fillText(`Duration: ${trackingStats.duration}`, margin, yPos);
+  } else {
+    ctx.fillText('No tracking data', margin, yPos);
+  }
+  yPos += 30 * s;
+  
+  // Vessel specifications
+  ctx.font = `bold ${16 * s}px Arial, sans-serif`;
+  ctx.fillText('🛥️ VESSEL SPECS:', margin, yPos);
+  yPos += 25 * s;
+  
+  ctx.font = `${14 * s}px Arial, sans-serif`;
+  ctx.fillText(`Length: ${vesselLength} ft`, margin, yPos);
+  yPos += 20 * s;
+  ctx.fillText(`Width: ${vesselWidth} ft`, margin, yPos);
+  yPos += 30 * s;
+  
+  // GPS Configuration
+  ctx.font = `bold ${16 * s}px Arial, sans-serif`;
+  ctx.fillText('🛰️ GPS CONFIG:', margin, yPos);
+  yPos += 25 * s;
+  
+  ctx.font = `${14 * s}px Arial, sans-serif`;
+  ctx.fillText(`Primary: ${configdata.primaryGpsPort || 'N/A'}`, margin, yPos);
+  yPos += 20 * s;
+  ctx.fillText(`Secondary: ${configdata.secondaryGpsPort || 'N/A'}`, margin, yPos);
+  yPos += 20 * s;
+  ctx.fillText(`Baud Rate: ${configdata.gpsBaudRate || 'N/A'}`, margin, yPos);
+  
+  // RIGHT PANEL - Statistics and Path Info
+  const rightPanelX = width - panelWidth;
+  ctx.fillStyle = 'rgba(60, 30, 0, 0.95)'; // Dark brown background
+  ctx.fillRect(rightPanelX, 0, panelWidth, height);
+  
+  // Right panel border
+  ctx.strokeStyle = '#ff6600';
+  ctx.lineWidth = 3 * s;
+  ctx.strokeRect(rightPanelX, 0, panelWidth, height);
+  
+  // RIGHT PANEL CONTENT
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'left';
+  
+  yPos = 30 * s;
+  
+  // Statistics title
+  ctx.font = `bold ${28 * s}px Arial, sans-serif`;
+  ctx.fillStyle = '#ff6600';
+  ctx.fillText('📊 TRACKING', rightPanelX + margin, yPos);
+  yPos += lineHeight;
+  ctx.fillText('STATISTICS', rightPanelX + margin, yPos);
+  yPos += lineHeight + 10 * s;
+  
+  // Path statistics
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold ${16 * s}px Arial, sans-serif`;
+  ctx.fillText('📍 PATH DATA:', rightPanelX + margin, yPos);
+  yPos += 25 * s;
+  
+  ctx.font = `${14 * s}px Arial, sans-serif`;
+  ctx.fillText(`Path Points: ${pathPoints.length}`, rightPanelX + margin, yPos);
+  yPos += 20 * s;
+  ctx.fillText(`Added Points: ${addedPoints.length}`, rightPanelX + margin, yPos);
+  yPos += 20 * s;
+  ctx.fillText(`Total Distance: ${trackingStats.totalDistance}`, rightPanelX + margin, yPos);
+  yPos += 20 * s;
+  ctx.fillText(`Avg Speed: ${trackingStats.avgSpeed}`, rightPanelX + margin, yPos);
+  yPos += 30 * s;
+  
+  // Coordinates
+  if (pathPoints.length > 0) {
+    ctx.font = `bold ${16 * s}px Arial, sans-serif`;
+    ctx.fillText('📍 COORDINATES:', rightPanelX + margin, yPos);
+    yPos += 25 * s;
+    
+    ctx.font = `${14 * s}px Arial, sans-serif`;
+    ctx.fillText('🟢 START POSITION:', rightPanelX + margin, yPos);
+    yPos += 20 * s;
+    ctx.fillText(`${trackingStats.startCoords}`, rightPanelX + margin, yPos);
+    yPos += 25 * s;
+    
+    ctx.fillText('🔴 END POSITION:', rightPanelX + margin, yPos);
+    yPos += 20 * s;
+    ctx.fillText(`${trackingStats.endCoords}`, rightPanelX + margin, yPos);
+    yPos += 30 * s;
+  }
+  
+  // Legend at bottom of right panel
+  ctx.font = `bold ${16 * s}px Arial, sans-serif`;
+  ctx.fillText('🗺️ MAP LEGEND:', rightPanelX + margin, height - 200 * s);
+  
+  ctx.font = `${13 * s}px Arial, sans-serif`;
+  const legendItems = [
+    '🟢 Green Path = Vessel Track',
+    '🟢 Green Boxes = Added Points',
+    '🔴 F = Front GPS (Rover)',
+    '🔵 B = Back GPS (Base)',
+    '🟢 Green Rectangle = Current Vessel'
+  ];
+  
+  legendItems.forEach((item, index) => {
+    ctx.fillText(item, rightPanelX + margin, height - 170 * s + (index * 18 * s));
+  });
+  
+  // Reset text align and baseline
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+}
+
+// Legacy function for backwards compatibility
+function addTrackingOverlay(ctx, width, height, filename) {
+  addHighQualityTrackingOverlay(ctx, width, height, 1, filename);
+}
+
+// Calculate comprehensive tracking statistics
+function calculateTrackingStatistics() {
+  const stats = {
+    startTime: null,
+    endTime: null,
+    duration: null,
+    totalDistance: '0.00 mi',
+    avgSpeed: '0.00 mph',
+    startCoords: '--',
+    endCoords: '--'
+  };
+  
+  if (pathPoints.length === 0) {
+    return stats;
+  }
+  
+  // Time information
+  const firstPoint = pathPoints[0];
+  const lastPoint = pathPoints[pathPoints.length - 1];
+  
+  if (firstPoint.timestamp && lastPoint.timestamp) {
+    const startTime = new Date(firstPoint.timestamp);
+    const endTime = new Date(lastPoint.timestamp);
+    
+    stats.startTime = startTime.toLocaleTimeString();
+    stats.endTime = endTime.toLocaleTimeString();
+    
+    const durationMs = endTime - startTime;
+    const durationMinutes = Math.round(durationMs / 60000);
+    stats.duration = `${Math.floor(durationMinutes / 60)}h ${durationMinutes % 60}m`;
+  }
+  
+  // Distance calculation
+  let totalDistanceMeters = 0;
+  for (let i = 1; i < pathPoints.length; i++) {
+    const dist = calculateDistance(
+      pathPoints[i-1].lat, pathPoints[i-1].lng,
+      pathPoints[i].lat, pathPoints[i].lng
+    );
+    totalDistanceMeters += dist;
+  }
+  
+  const totalDistanceMiles = totalDistanceMeters * 0.000621371;
+  stats.totalDistance = totalDistanceMiles.toFixed(2) + ' mi';
+  
+  // Average speed
+  if (firstPoint.timestamp && lastPoint.timestamp) {
+    const startTime = new Date(firstPoint.timestamp);
+    const endTime = new Date(lastPoint.timestamp);
+    const durationHours = (endTime - startTime) / (1000 * 60 * 60);
+    
+    if (durationHours > 0) {
+      const avgSpeedMph = totalDistanceMiles / durationHours;
+      stats.avgSpeed = avgSpeedMph.toFixed(2) + ' mph';
+    }
+  }
+  
+  // Coordinates
+  stats.startCoords = `${firstPoint.lat.toFixed(4)}, ${firstPoint.lng.toFixed(4)}`;
+  stats.endCoords = `${lastPoint.lat.toFixed(4)}, ${lastPoint.lng.toFixed(4)}`;
+  
+  return stats;
+}
+
+// Legacy function for backwards compatibility
+function addMapOverlay(ctx, width, height, filename) {
+  addTrackingOverlay(ctx, width, height, filename);
 }
 
 // Save data to file
