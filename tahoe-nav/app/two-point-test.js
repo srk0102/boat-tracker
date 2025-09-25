@@ -565,11 +565,13 @@ function addPoint() {
   const degToRad = Math.PI / 180;
   const radToDeg = 180 / Math.PI;
   function offsetToLatLng(lat, lng, xForward, yLeft) {
-    const dLat = (xForward * Math.cos(headingRad) - yLeft * Math.sin(headingRad)) / earthRadius;
-    const dLng = (xForward * Math.sin(headingRad) + yLeft * Math.cos(headingRad)) / (earthRadius * Math.cos(lat * degToRad));
+    // Convert meters to degrees: 1 degree latitude ≈ 111,320 meters
+    // For longitude, adjust by cos(latitude) since longitude lines get closer at higher latitudes
+    const dLat = (xForward * Math.cos(headingRad) - yLeft * Math.sin(headingRad)) / 111320;
+    const dLng = (xForward * Math.sin(headingRad) + yLeft * Math.cos(headingRad)) / (111320 * Math.cos(lat * degToRad));
     return [
-      lng + dLng * radToDeg,
-      lat + dLat * radToDeg
+      lng + dLng, // longitude
+      lat + dLat  // latitude
     ];
   }
   const corners = cornersLocal.map(corner => offsetToLatLng(centerLat, centerLng, corner.x, corner.y));
@@ -617,6 +619,275 @@ function clearAll() {
 // Center map on vessel
 function centerMap() {
   centerMapOnVessel();
+}
+
+// Reconfigure GPS settings - Open modal
+function reconfigureGPS() {
+  // Ensure we have the latest config data
+  ensureConfigExists();
+  
+  // Load current config values into modal
+  loadConfigIntoModal();
+  
+  // Show the modal
+  document.getElementById('gps-config-modal').style.display = 'block';
+}
+
+// Load current config values into modal inputs
+function loadConfigIntoModal() {
+  document.getElementById('modal-rover-port').value = configdata.primaryGpsPort || '';
+  document.getElementById('modal-base-port').value = configdata.secondaryGpsPort || '';
+  document.getElementById('modal-baud-rate').value = configdata.gpsBaudRate || 9600;
+  document.getElementById('modal-vessel-length').value = configdata.boatDimensions?.length || 40;
+  document.getElementById('modal-vessel-width').value = configdata.boatDimensions?.width || 16;
+}
+
+// Auto-save GPS ports when they are entered (so user doesn't need to enter every time)
+let autoSaveTimeout = null;
+function autoSaveGPSPorts() {
+  // Clear previous timeout to avoid too frequent saves
+  if (autoSaveTimeout) {
+    clearTimeout(autoSaveTimeout);
+  }
+  
+  // Wait 1 second after user stops typing before saving
+  autoSaveTimeout = setTimeout(() => {
+    const roverPort = document.getElementById('modal-rover-port').value.trim();
+    const basePort = document.getElementById('modal-base-port').value.trim();
+    
+    // Only save if both ports are entered and different
+    if (roverPort && basePort && roverPort !== basePort) {
+      try {
+        // Update config data
+        configdata.primaryGpsPort = roverPort;
+        configdata.secondaryGpsPort = basePort;
+        
+        // Save to file
+        const fs = require('fs');
+        const path = require('path');
+        const configPath = path.join(__dirname, '..', 'config.json');
+        fs.writeFileSync(configPath, JSON.stringify(configdata, null, 2));
+        
+        console.log('💾 Auto-saved GPS ports:', roverPort, '&', basePort);
+      } catch (error) {
+        console.log('⚠️ Could not auto-save GPS ports:', error.message);
+      }
+    }
+  }, 1000); // Wait 1 second after user stops typing
+}
+
+// Show modal status message
+function showModalStatus(message, type = 'info') {
+  const statusDiv = document.getElementById('modal-status-message');
+  statusDiv.innerHTML = `<div class="modal-status-message modal-status-${type}">${message}</div>`;
+}
+
+// Validate modal inputs
+function validateModalInputs() {
+  const roverPort = document.getElementById('modal-rover-port').value.trim();
+  const basePort = document.getElementById('modal-base-port').value.trim();
+  const baudRate = parseInt(document.getElementById('modal-baud-rate').value);
+  const length = parseFloat(document.getElementById('modal-vessel-length').value);
+  const width = parseFloat(document.getElementById('modal-vessel-width').value);
+
+  if (!roverPort || !basePort) {
+    showModalStatus('❌ Please enter both ROVER and BASE port numbers', 'error');
+    return false;
+  }
+
+  if (roverPort === basePort) {
+    showModalStatus('❌ ROVER and BASE ports must be different', 'error');
+    return false;
+  }
+
+  if (isNaN(baudRate) || baudRate < 1200 || baudRate > 115200) {
+    showModalStatus('❌ Please enter a valid baud rate (1200-115200)', 'error');
+    return false;
+  }
+
+  if (isNaN(length) || length <= 0 || isNaN(width) || width <= 0) {
+    showModalStatus('❌ Please enter valid vessel dimensions', 'error');
+    return false;
+  }
+
+  return true;
+}
+
+// Test GPS connection from modal
+async function testModalConnection() {
+  if (!validateModalInputs()) return;
+
+  const roverPort = document.getElementById('modal-rover-port').value.trim();
+  const basePort = document.getElementById('modal-base-port').value.trim();
+  const baudRate = parseInt(document.getElementById('modal-baud-rate').value);
+
+  showModalStatus('🔍 Testing GPS connections...', 'info');
+  document.getElementById('modal-test-connection').disabled = true;
+
+  try {
+    // Test if we can create serial connections
+    const { SerialPort } = require('serialport');
+    
+    let roverConnected = false;
+    let baseConnected = false;
+    let roverSerial = null;
+    let baseSerial = null;
+
+    // Test ROVER port
+    try {
+      roverSerial = new SerialPort({ path: roverPort, baudRate: baudRate });
+      
+      // Wait for port to open with timeout
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Port opening timeout'));
+        }, 3000);
+        
+        roverSerial.open((error) => {
+          clearTimeout(timeout);
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
+          }
+        });
+      });
+      
+      roverConnected = true;
+      console.log('✅ ROVER port test successful');
+      
+    } catch (error) {
+      console.log('❌ ROVER port test failed:', error.message);
+      // If access denied, it might mean port is already in use (which is actually good)
+      if (error.message.includes('Access denied') || error.message.includes('Port is opening')) {
+        roverConnected = true; // Port exists and is accessible
+        console.log('✅ ROVER port exists (already in use by main app)');
+      }
+    } finally {
+      if (roverSerial && roverSerial.isOpen) {
+        try {
+          roverSerial.close();
+        } catch (closeError) {
+          console.log('Warning: Could not close ROVER port:', closeError.message);
+        }
+      }
+    }
+
+    // Test BASE port
+    try {
+      baseSerial = new SerialPort({ path: basePort, baudRate: baudRate });
+      
+      // Wait for port to open with timeout
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Port opening timeout'));
+        }, 3000);
+        
+        baseSerial.open((error) => {
+          clearTimeout(timeout);
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
+          }
+        });
+      });
+      
+      baseConnected = true;
+      console.log('✅ BASE port test successful');
+      
+    } catch (error) {
+      console.log('❌ BASE port test failed:', error.message);
+      // If access denied, it might mean port is already in use (which is actually good)
+      if (error.message.includes('Access denied') || error.message.includes('Port is opening')) {
+        baseConnected = true; // Port exists and is accessible
+        console.log('✅ BASE port exists (already in use by main app)');
+      }
+    } finally {
+      if (baseSerial && baseSerial.isOpen) {
+        try {
+          baseSerial.close();
+        } catch (closeError) {
+          console.log('Warning: Could not close BASE port:', closeError.message);
+        }
+      }
+    }
+
+    if (roverConnected && baseConnected) {
+      showModalStatus('✅ Both GPS ports are accessible and ready!', 'success');
+    } else if (roverConnected) {
+      showModalStatus('⚠️ ROVER port is ready, but BASE port is not accessible. Please check your connections.', 'error');
+    } else if (baseConnected) {
+      showModalStatus('⚠️ BASE port is ready, but ROVER port is not accessible. Please check your connections.', 'error');
+    } else {
+      showModalStatus('❌ Neither GPS port is accessible. Please check your connections and port numbers.', 'error');
+    }
+
+  } catch (error) {
+    showModalStatus(`❌ Connection test failed: ${error.message}`, 'error');
+  } finally {
+    document.getElementById('modal-test-connection').disabled = false;
+  }
+}
+
+// Save modal configuration
+function saveModalConfig() {
+  if (!validateModalInputs()) return;
+
+  const roverPort = document.getElementById('modal-rover-port').value.trim();
+  const basePort = document.getElementById('modal-base-port').value.trim();
+  const baudRate = parseInt(document.getElementById('modal-baud-rate').value);
+  const length = parseFloat(document.getElementById('modal-vessel-length').value);
+  const width = parseFloat(document.getElementById('modal-vessel-width').value);
+
+  try {
+    // Update config data
+    configdata.primaryGpsPort = roverPort;
+    configdata.secondaryGpsPort = basePort;
+    configdata.gpsBaudRate = baudRate;
+    configdata.boatDimensions = {
+      length: length,
+      width: width,
+      unit: "feet"
+    };
+
+    // Save to file
+    const fs = require('fs');
+    const path = require('path');
+    const configPath = path.join(__dirname, '..', 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify(configdata, null, 2));
+    
+    // Update UI inputs
+    document.getElementById('vessel-length').value = length;
+    document.getElementById('vessel-width').value = width;
+    
+    showModalStatus('✅ Configuration saved successfully!', 'success');
+    
+    // Close modal after a short delay
+    setTimeout(() => {
+      document.getElementById('gps-config-modal').style.display = 'none';
+      
+      // Restart GPS connection with new settings
+      if (gpsReader) {
+        gpsReader.disconnect();
+      }
+      stopReconnectionAttempts();
+      
+      // Reinitialize GPS reader with new config
+      setTimeout(() => {
+        initGPSReader();
+      }, 1000);
+      
+    }, 2000);
+
+  } catch (error) {
+    showModalStatus(`❌ Failed to save configuration: ${error.message}`, 'error');
+  }
+}
+
+// Close modal
+function closeModal() {
+  document.getElementById('gps-config-modal').style.display = 'none';
 }
 
 // Center map on vessel (internal function)
@@ -751,12 +1022,13 @@ function createCalibratedVesselBoxWithHeading(smoothedHeading) {
   const radToDeg = 180 / Math.PI;
 
   function offsetToLatLng(lat, lng, xForward, yLeft) {
-    // Move xForward meters in heading direction, yLeft meters left of heading
-    const dLat = (xForward * Math.cos(headingRad) - yLeft * Math.sin(headingRad)) / earthRadius;
-    const dLng = (xForward * Math.sin(headingRad) + yLeft * Math.cos(headingRad)) / (earthRadius * Math.cos(lat * degToRad));
+    // Convert meters to degrees: 1 degree latitude ≈ 111,320 meters
+    // For longitude, adjust by cos(latitude) since longitude lines get closer at higher latitudes
+    const dLat = (xForward * Math.cos(headingRad) - yLeft * Math.sin(headingRad)) / 111320;
+    const dLng = (xForward * Math.sin(headingRad) + yLeft * Math.cos(headingRad)) / (111320 * Math.cos(lat * degToRad));
     return [
-      lng + dLng * radToDeg,
-      lat + dLat * radToDeg
+      lng + dLng, // longitude
+      lat + dLat  // latitude
     ];
   }
 
@@ -1448,9 +1720,65 @@ function updateUIWithConfig() {
   }
 }
 
+// Ensure config file exists and has proper structure
+function ensureConfigExists() {
+  const fs = require('fs');
+  const path = require('path');
+  const configPath = path.join(__dirname, '..', 'config.json');
+  
+  try {
+    if (!fs.existsSync(configPath)) {
+      // Create default config file
+      const defaultConfig = {
+        primaryGpsPort: null,
+        secondaryGpsPort: null,
+        gpsBaudRate: 9600,
+        boatDimensions: {
+          length: 40,
+          width: 16,
+          unit: "feet"
+        }
+      };
+      
+      fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
+      console.log('📝 Created default config.json');
+    } else {
+      // Load and validate existing config
+      const existingConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      
+      // Ensure all required fields exist
+      const completeConfig = {
+        primaryGpsPort: existingConfig.primaryGpsPort || null,
+        secondaryGpsPort: existingConfig.secondaryGpsPort || null,
+        gpsBaudRate: existingConfig.gpsBaudRate || 9600,
+        boatDimensions: {
+          length: existingConfig.boatDimensions?.length || 40,
+          width: existingConfig.boatDimensions?.width || 16,
+          unit: existingConfig.boatDimensions?.unit || "feet"
+        }
+      };
+      
+      // Update configdata
+      configdata = completeConfig;
+      
+      console.log('📋 Loaded config:', {
+        rover: configdata.primaryGpsPort,
+        base: configdata.secondaryGpsPort,
+        baud: configdata.gpsBaudRate,
+        vessel: `${configdata.boatDimensions.length}ft x ${configdata.boatDimensions.width}ft`
+      });
+    }
+  } catch (error) {
+    console.error('❌ Config file error:', error);
+  }
+}
+
 // Initialize when page loads
 document.addEventListener("DOMContentLoaded", () => {
   console.log('🚀 Real GPS two-point test starting...');
+  
+  // Ensure config file exists and is properly structured
+  ensureConfigExists();
   
   // Update UI with config values
   updateUIWithConfig();
@@ -1468,6 +1796,25 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById('export-data').onclick = exportTrackingData;
   document.getElementById('clear-all').onclick = clearAll;
   document.getElementById('center-map').onclick = centerMap;
+  document.getElementById('reconfigure').onclick = reconfigureGPS;
+  
+  // Hook up modal buttons
+  document.getElementById('modal-test-connection').onclick = testModalConnection;
+  document.getElementById('modal-save-config').onclick = saveModalConfig;
+  document.getElementById('modal-cancel').onclick = closeModal;
+  
+  // Hook up modal close events
+  document.getElementsByClassName('close')[0].onclick = closeModal;
+  window.onclick = function(event) {
+    const modal = document.getElementById('gps-config-modal');
+    if (event.target == modal) {
+      closeModal();
+    }
+  };
+  
+  // Add auto-save event listeners for GPS ports
+  document.getElementById('modal-rover-port').addEventListener('input', autoSaveGPSPorts);
+  document.getElementById('modal-base-port').addEventListener('input', autoSaveGPSPorts);
   
   // Auto-update when dimensions change
   ['vessel-length', 'vessel-width'].forEach(id => {

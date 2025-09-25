@@ -1,29 +1,68 @@
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, ipcMain } = require("electron");
+const fs = require('fs');
+const path = require('path');
 
-function createWindow() {
-  // Create the browser window.
-  const win = new BrowserWindow({
+let mainWindow = null;
+let setupWindow = null;
+
+function createMainWindow() {
+  // Create the main browser window.
+  mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
-      webSecurity: false, // Disable for development to allow Mapbox workers
+      webSecurity: false,
       allowRunningInsecureContent: true,
     },
   });
 
-  // and load the index.html of the app.
-  win.loadFile("app/two-point-test.html");
+  // Load the main application
+  mainWindow.loadFile("app/two-point-test.html");
 
   // Open the DevTools.
-  win.webContents.openDevTools();
+  mainWindow.webContents.openDevTools();
+
+  // Handle window closed
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+}
+
+function createSetupWindow() {
+  // Create the port configuration window.
+  setupWindow = new BrowserWindow({
+    width: 700,
+    height: 800,
+    resizable: false,
+    center: true,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+    },
+  });
+
+  // Load the port configuration
+  setupWindow.loadFile("app/port-config.html");
+
+  // Handle window closed
+  setupWindow.on('closed', () => {
+    setupWindow = null;
+  });
+}
+
+function checkConfigExists() {
+  const configPath = path.join(__dirname, 'config.json');
+  return fs.existsSync(configPath);
 }
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  // Always launch main app - configuration is handled via modal
+  createMainWindow();
+});
 
 // Quit when all windows are closed.
 app.on("window-all-closed", () => {
@@ -38,7 +77,7 @@ app.on("activate", () => {
   // On macOS it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
+    createMainWindow();
   }
 });
 

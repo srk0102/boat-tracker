@@ -7,3 +7,4 @@ node_modules
 /logtocsv/dist
 /logtocsv/__pycache__
 config.json
+dist

@@ -143,6 +143,7 @@
         <button id="export-data" class="btn-purple">Export Track</button>
         <button id="clear-all" class="btn-warning">Clear All</button>
         <button id="center-map" class="btn-primary">Center on Vessel</button>
+        <button id="reconfigure" class="btn-secondary">⚙️ Reconfigure GPS</button>
       </div>
       
       <!-- Status -->
@@ -165,7 +166,293 @@
     
     <!-- OpenLayers from CDN -->
     <script src="https://cdn.jsdelivr.net/npm/ol@7.5.2/dist/ol.js"></script>
+
+    <style>
+      /* Modal Styles */
+      .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0,0,0,0.5);
+      }
+      
+      .modal-content {
+        background-color: #fefefe;
+        margin: 5% auto;
+        padding: 0;
+        border: none;
+        border-radius: 15px;
+        width: 80%;
+        max-width: 600px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+      }
+      
+      .modal-header {
+        background: linear-gradient(135deg, #3498db, #2980b9);
+        color: white;
+        padding: 20px;
+        border-radius: 15px 15px 0 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      
+      .modal-header h2 {
+        margin: 0;
+        font-size: 1.5em;
+      }
+      
+      .close {
+        color: white;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+        line-height: 1;
+      }
+      
+      .close:hover {
+        opacity: 0.7;
+      }
+      
+      .modal-body {
+        padding: 20px;
+      }
+      
+      .modal-footer {
+        padding: 20px;
+        border-top: 1px solid #eee;
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+      }
+      
+      .config-section {
+        margin: 20px 0;
+      }
+      
+      .config-section h3 {
+        color: #2c3e50;
+        margin-bottom: 15px;
+        font-size: 1.2em;
+        border-bottom: 2px solid #3498db;
+        padding-bottom: 5px;
+      }
+      
+      .gps-info {
+        background: #e8f5e8;
+        border: 1px solid #c3e6c3;
+        border-radius: 8px;
+        padding: 15px;
+        margin: 15px 0;
+        color: #2d5016;
+      }
+      
+      .gps-info h4 {
+        margin: 0 0 10px 0;
+        color: #1e7e34;
+      }
+      
+      .gps-info p {
+        margin: 5px 0;
+        font-size: 14px;
+      }
+      
+      .port-group {
+        display: flex;
+        align-items: center;
+        margin: 15px 0;
+        padding: 12px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border: 2px solid #e9ecef;
+      }
+      
+      .port-group label {
+        font-weight: bold;
+        min-width: 100px;
+        margin-right: 15px;
+        color: #2c3e50;
+        font-size: 14px;
+      }
+      
+      .port-group input {
+        flex: 1;
+        padding: 10px;
+        border: 2px solid #ddd;
+        border-radius: 5px;
+        font-size: 14px;
+        font-family: 'Courier New', monospace;
+      }
+      
+      .port-group input:focus {
+        border-color: #3498db;
+        outline: none;
+        box-shadow: 0 0 5px rgba(52, 152, 219, 0.3);
+      }
+      
+      .help-text {
+        background: #fff3cd;
+        border: 1px solid #ffeaa7;
+        border-radius: 5px;
+        padding: 12px;
+        margin: 15px 0;
+        color: #856404;
+        font-size: 13px;
+      }
+      
+      .btn-test, .btn-save, .btn-cancel {
+        padding: 12px 20px;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+      
+      .btn-test {
+        background: #27ae60;
+        color: white;
+      }
+      
+      .btn-test:hover {
+        background: #229954;
+        transform: translateY(-1px);
+      }
+      
+      .btn-test:disabled {
+        background: #95a5a6;
+        cursor: not-allowed;
+        transform: none;
+      }
+      
+      .btn-save {
+        background: #3498db;
+        color: white;
+      }
+      
+      .btn-save:hover {
+        background: #2980b9;
+        transform: translateY(-1px);
+      }
+      
+      .btn-save:disabled {
+        background: #95a5a6;
+        cursor: not-allowed;
+        transform: none;
+      }
+      
+      .btn-cancel {
+        background: #95a5a6;
+        color: white;
+      }
+      
+      .btn-cancel:hover {
+        background: #7f8c8d;
+        transform: translateY(-1px);
+      }
+      
+      .modal-status-message {
+        padding: 12px;
+        border-radius: 6px;
+        margin: 15px 0;
+        font-weight: bold;
+        font-size: 14px;
+      }
+      
+      .modal-status-success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+      
+      .modal-status-error {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+      
+      .modal-status-info {
+        background: #d1ecf1;
+        color: #0c5460;
+        border: 1px solid #bee5eb;
+      }
+    </style>
     
+    <!-- GPS Configuration Modal -->
+    <div id="gps-config-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>⚙️ GPS Port Configuration</h2>
+          <span class="close">&times;</span>
+        </div>
+        
+        <div class="modal-body">
+          <div class="config-section">
+            <h3>📡 GPS Port Settings</h3>
+            
+            <div class="gps-info">
+              <h4>🛰️ GPS Setup Information:</h4>
+              <p><strong>ROVER (Front GPS)</strong>: This GPS is at the front of your vessel and determines direction</p>
+              <p><strong>BASE (Back GPS)</strong>: This GPS is at the back of your vessel and provides reference</p>
+              <p><strong>Direction</strong>: System calculates heading from BASE → ROVER</p>
+            </div>
+            
+            <div class="port-group">
+              <label>🛰️ ROVER:</label>
+              <input type="text" id="modal-rover-port" placeholder="e.g., COM7" value="">
+            </div>
+            
+            <div class="port-group">
+              <label>🏠 BASE:</label>
+              <input type="text" id="modal-base-port" placeholder="e.g., COM12" value="">
+            </div>
+            
+            <div class="port-group">
+              <label>⚡ Baud Rate:</label>
+              <input disabled type="number" id="modal-baud-rate" placeholder="9600" value="9600" min="1200" max="115200">
+            </div>
+            
+            <div class="help-text">
+              <strong>💡 How to find COM ports:</strong><br>
+              1. Press <strong>Windows + X</strong> → "Device Manager"<br>
+              2. Expand "Ports (COM & LPT)"<br>
+              3. Look for "USB Serial Port (COM7)" or "u-blox"<br>
+              4. Note the COM port numbers (e.g., COM7, COM12)
+            </div>
+          </div>
+
+          <div class="config-section">
+            <h3>🚤 Vessel Dimensions</h3>
+            
+            <div class="port-group">
+              <label>📏 Length (ft):</label>
+              <input type="number" id="modal-vessel-length" placeholder="40" value="40" min="1" max="200" step="0.1">
+            </div>
+            
+            <div class="port-group">
+              <label>📐 Width (ft):</label>
+              <input type="number" id="modal-vessel-width" placeholder="16" value="16" min="1" max="50" step="0.1">
+            </div>
+          </div>
+
+          <div id="modal-status-message"></div>
+        </div>
+        
+        <div class="modal-footer">
+          <button class="btn-test" id="modal-test-connection">🔍 Test Connection</button>
+          <button class="btn-save" id="modal-save-config">💾 Save & Apply</button>
+          <button class="btn-cancel" id="modal-cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Test Script -->
     <script src="two-point-test.js"></script>
   </body>
